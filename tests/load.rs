@@ -56,7 +56,7 @@ async fn concurrent_cpu_and_sleep_tasks_reach_terminal() {
             .expect("every task should reach a terminal state");
         let status = terminal["data"]["status"].as_str().unwrap();
         assert!(
-            matches!(status, "completed" | "failed" | "cancelled"),
+            matches!(status, "Completed" | "Failed" | "Cancelled"),
             "unexpected terminal status: {status}"
         );
     }
@@ -176,7 +176,8 @@ async fn large_artifact_upload_download_round_trip() {
 
     // Build a ~1.5 MiB tarball containing a single large file.
     let payload_size = 1_500_000usize;
-    let data: Vec<u8> = (0..payload_size).map(|i| (i % 256) as u8).collect();
+    let mut rng = rand::rng();
+    let data: Vec<u8> = (0..payload_size).map(|_| rng.random::<u8>()).collect();
 
     let mut tarball = Vec::new();
     {
@@ -190,7 +191,11 @@ async fn large_artifact_upload_download_round_trip() {
         builder.append(&header, data.as_slice()).unwrap();
         builder.finish().unwrap();
     }
-    assert!(tarball.len() > 1_000_000 && tarball.len() < 2_000_000);
+    assert!(
+        tarball.len() > 1_000_000 && tarball.len() < 2_000_000,
+        "tarball size {} is outside the 1-2 MiB range",
+        tarball.len()
+    );
 
     // Upload (restore) the tarball.
     let restore_url = format!("http://{}/admin/restore", server.addr);

@@ -1,7 +1,7 @@
 # Multi-stage build for the vico-vee standalone service.
 #
-# Produces a small image containing only the statically linked binary and the
-# embedded migration files.
+# Produces a small image containing the compiled binary and embedded migration
+# files.
 
 FROM rust:1.96-slim-bookworm AS builder
 
@@ -50,6 +50,8 @@ ENV VICO_VEE_DATA_DIR=/data
 ENV VICO_VEE_CONFIG_DIR=/config
 ENV VICO_VEE_BIND=0.0.0.0
 ENV VICO_VEE_PORT=9987
+
+USER vico-vee
 
 ENTRYPOINT ["/usr/local/bin/vico-vee"]
 CMD ["--bind", "0.0.0.0"]

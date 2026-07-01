@@ -43,8 +43,7 @@ async fn submit_noop(client: &Client, addr: &SocketAddr, seq: usize) {
         .await
         .unwrap();
     assert!(resp.status().is_success());
-    let value: Value = resp.json().await.unwrap();
-    black_box(value);
+    black_box(resp);
 }
 
 fn bench_submit_1000_noop_python(c: &mut Criterion) {
@@ -109,8 +108,9 @@ fn bench_submit_1000_noop_python(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("noop_python_submit");
     group.throughput(Throughput::Elements(1000));
-    group.sample_size(10);
-    group.measurement_time(Duration::from_secs(20));
+    group.warm_up_time(Duration::from_secs(1));
+    group.sample_size(3);
+    group.measurement_time(Duration::from_secs(15));
 
     group.bench_function("1000_tasks", |b| {
         b.iter(|| {

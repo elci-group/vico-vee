@@ -64,6 +64,12 @@ keyring = { version = "3", features = ["windows-native"] }
 
 [dev-dependencies]
 tokio-test = "0.4"
+criterion = { version = "0.5", features = ["async_tokio"] }
+tempfile = "3"
+
+[[bench]]
+name = "throughput"
+harness = false
 
 [[bin]]
 name = "vico-vee"

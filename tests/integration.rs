@@ -148,7 +148,7 @@ async fn shell_submit_status_list_artifacts() {
         &server.addr,
         ADMIN_TOKEN,
         "shell",
-        "echo 'hello from shell integration test'",
+        "echo hello-shell-integration",
         "shell-agent",
         None,
     )
@@ -203,7 +203,7 @@ async fn shell_submit_status_list_artifacts() {
                 "stdout artifact missing: {}",
                 terminal["data"]["artifacts"]
             ))
-            .contains("hello from shell integration test")
+            .contains("hello-shell-integration")
     );
 
     let artifacts_url = format!("http://{}/vee/artifacts", server.addr);

@@ -33,10 +33,14 @@ fn init_tracing(config: &Config) {
 
     match config.log_format {
         LogFormat::Json => {
-            registry.with(tracing_subscriber::fmt::layer().json()).init();
+            registry
+                .with(tracing_subscriber::fmt::layer().json())
+                .init();
         }
         LogFormat::Compact => {
-            registry.with(tracing_subscriber::fmt::layer().compact()).init();
+            registry
+                .with(tracing_subscriber::fmt::layer().compact())
+                .init();
         }
         LogFormat::Pretty => {
             registry.with(tracing_subscriber::fmt::layer()).init();

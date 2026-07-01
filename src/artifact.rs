@@ -49,27 +49,9 @@ impl ArtifactStore {
         std::fs::create_dir_all(blob_dir)
             .map_err(|e| format!("create artifact blob dir: {}", e))?;
         let conn = Connection::open(db_path).map_err(|e| format!("open artifact db: {}", e))?;
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS vee_artifacts (
-                artifact_id TEXT PRIMARY KEY,
-                execution_id TEXT NOT NULL,
-                kind TEXT NOT NULL,
-                metadata_json TEXT NOT NULL,
-                blob_path TEXT NOT NULL,
-                blob_hash TEXT,
-                provenance_json TEXT,
-                created_at TEXT NOT NULL DEFAULT (datetime('now'))
-            )",
-            [],
-        )
-        .map_err(|e| format!("create artifacts table: {}", e))?;
-        // Best-effort migration: add blob_hash to existing tables.
-        let _ = conn.execute("ALTER TABLE vee_artifacts ADD COLUMN blob_hash TEXT", []);
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_artifact_execution ON vee_artifacts(execution_id)",
-            [],
-        )
-        .map_err(|e| format!("create artifact execution index: {}", e))?;
+        crate::migrations::Runner::new()
+            .run(&conn)
+            .map_err(|e| format!("run artifact schema migrations: {}", e))?;
         Ok(Self {
             db: Arc::new(tokio::sync::Mutex::new(conn)),
             blob_dir: blob_dir.to_path_buf(),

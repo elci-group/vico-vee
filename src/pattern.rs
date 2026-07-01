@@ -33,14 +33,9 @@ impl PatternStore {
         }
 
         let db = rusqlite::Connection::open(path).map_err(|e| e.to_string())?;
-        db.execute(
-            "CREATE TABLE IF NOT EXISTS patterns (
-                pattern_id TEXT PRIMARY KEY,
-                data TEXT NOT NULL
-            )",
-            [],
-        )
-        .map_err(|e| e.to_string())?;
+        crate::migrations::Runner::new()
+            .run(&db)
+            .map_err(|e| format!("run pattern schema migrations: {e}"))?;
 
         {
             let mut stmt = db

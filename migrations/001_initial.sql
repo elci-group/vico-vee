@@ -1,9 +1,7 @@
--- Initial schema for vico-vee
---
--- This migration creates the tables used by the artifact store, checkpoint
--- store, and pattern store.  It is applied once per SQLite database on first
--- use and tracked in `vee_migrations`.
+-- Initial schema for the ViCo Execution Environment (vico-vee).
+-- Applied by the migration runner on startup before the daemon starts.
 
+-- Persistent artifact metadata and content-addressable blob references.
 CREATE TABLE IF NOT EXISTS vee_artifacts (
     artifact_id TEXT PRIMARY KEY,
     execution_id TEXT NOT NULL,
@@ -17,6 +15,7 @@ CREATE TABLE IF NOT EXISTS vee_artifacts (
 
 CREATE INDEX IF NOT EXISTS idx_artifact_execution ON vee_artifacts(execution_id);
 
+-- Durable execution checkpoints for crash recovery.
 CREATE TABLE IF NOT EXISTS vee_checkpoints (
     checkpoint_id TEXT PRIMARY KEY,
     execution_id TEXT NOT NULL,
@@ -34,7 +33,14 @@ CREATE TABLE IF NOT EXISTS vee_checkpoints (
 
 CREATE INDEX IF NOT EXISTS idx_ckpt_exec ON vee_checkpoints(execution_id);
 
+-- Learned execution patterns.
 CREATE TABLE IF NOT EXISTS patterns (
     pattern_id TEXT PRIMARY KEY,
     data TEXT NOT NULL
+);
+
+-- Capability revocation list (JTIs).
+CREATE TABLE IF NOT EXISTS vee_revoked_capabilities (
+    jti TEXT PRIMARY KEY,
+    revoked_at TEXT NOT NULL DEFAULT (datetime('now'))
 );

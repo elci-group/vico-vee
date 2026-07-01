@@ -234,7 +234,10 @@ impl VeeConfig {
     }
 }
 
-fn load_config_file(mut config: VeeConfig, config_dir: &std::path::Path) -> Result<VeeConfig, String> {
+fn load_config_file(
+    mut config: VeeConfig,
+    config_dir: &std::path::Path,
+) -> Result<VeeConfig, String> {
     if !config_dir.exists() {
         return Ok(config);
     }

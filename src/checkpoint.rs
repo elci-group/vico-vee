@@ -36,30 +36,9 @@ pub struct CheckpointStore {
 impl CheckpointStore {
     pub fn new(db_path: &PathBuf) -> Result<Self, String> {
         let conn = Connection::open(db_path).map_err(|e| format!("open checkpoint db: {}", e))?;
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS vee_checkpoints (
-                checkpoint_id TEXT PRIMARY KEY,
-                execution_id TEXT NOT NULL,
-                phase TEXT NOT NULL,
-                status TEXT NOT NULL,
-                artifacts_json TEXT NOT NULL DEFAULT '[]',
-                validation_json TEXT,
-                error_log TEXT,
-                confidence REAL NOT NULL DEFAULT 0.0,
-                tokens_consumed INTEGER NOT NULL DEFAULT 0,
-                cpu_seconds_used REAL NOT NULL DEFAULT 0.0,
-                memory_peak_mb REAL NOT NULL DEFAULT 0.0,
-                created_at TEXT NOT NULL DEFAULT (datetime('now'))
-            )",
-            [],
-        )
-        .map_err(|e| format!("create checkpoints table: {}", e))?;
-
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_ckpt_exec ON vee_checkpoints(execution_id)",
-            [],
-        )
-        .map_err(|e| format!("create index: {}", e))?;
+        crate::migrations::Runner::new()
+            .run(&conn)
+            .map_err(|e| format!("run checkpoint schema migrations: {}", e))?;
 
         Ok(Self { conn })
     }

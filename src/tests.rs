@@ -265,8 +265,7 @@ fn test_sandbox_build_python_command() {
     let _ = std::fs::remove_dir_all(&output_dir);
 
     let (_cmd, config) =
-        crate::sandbox::build_python_command("print('hello')", &work_dir, &output_dir)
-            .unwrap();
+        crate::sandbox::build_python_command("print('hello')", &work_dir, &output_dir).unwrap();
 
     assert!(work_dir.exists());
     assert!(output_dir.exists());

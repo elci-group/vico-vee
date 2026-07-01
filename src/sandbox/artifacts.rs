@@ -102,10 +102,7 @@ fn image_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
 }
 
 /// Extract artifacts from sandbox result and output directory.
-pub fn extract_artifacts(
-    result: &SandboxResult,
-    output_dir: &Path,
-) -> Vec<crate::types::Artifact> {
+pub fn extract_artifacts(result: &SandboxResult, output_dir: &Path) -> Vec<crate::types::Artifact> {
     let mut artifacts = Vec::new();
 
     // Always capture stdout as text

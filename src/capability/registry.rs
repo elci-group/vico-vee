@@ -210,6 +210,8 @@ impl CapabilityRegistry {
                     }),
                     "network_dns" => Some(Capability::NetworkDns),
                     "process_spawn" => Some(Capability::ProcessSpawn),
+                    "cpu_cores" => value.and_then(|v| v.parse().ok()).map(Capability::CpuCores),
+                    "memory_mb" => value.and_then(|v| v.parse().ok()).map(Capability::MemoryMB),
                     "environment_read" => Some(Capability::EnvironmentRead),
                     "environment_write" => Some(Capability::EnvironmentWrite),
                     "gpu_compute" => Some(Capability::GpuCompute { device: None }),

@@ -54,8 +54,7 @@ pub struct AppState {
 
 impl AppState {
     pub async fn try_new(config: Config) -> Result<Self, String> {
-        std::fs::create_dir_all(&config.data_dir)
-            .map_err(|e| format!("create data dir: {}", e))?;
+        std::fs::create_dir_all(&config.data_dir).map_err(|e| format!("create data dir: {}", e))?;
 
         let key_dir = config.data_dir.join("keys");
         let revocation_dir = config.data_dir.join("revocations");
@@ -131,7 +130,8 @@ pub async fn vee_submit(
         _ => ExecutionLanguage::Python,
     };
 
-    let capabilities = crate::capability::CapabilityRegistry::parse_capabilities(&input.capabilities);
+    let capabilities =
+        crate::capability::CapabilityRegistry::parse_capabilities(&input.capabilities);
     let budget = input
         .budget
         .map(crate::types::ExecutionBudget::from)

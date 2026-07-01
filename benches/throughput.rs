@@ -46,7 +46,7 @@ async fn submit_noop(client: &Client, addr: &SocketAddr, seq: usize) {
     black_box(resp);
 }
 
-fn bench_submit_1000_noop_python(c: &mut Criterion) {
+fn bench_submit_1000_noop_shell(c: &mut Criterion) {
     let rt = tokio::runtime::Runtime::new().unwrap();
 
     let tmp = TempDir::new().unwrap();
@@ -78,25 +78,28 @@ fn bench_submit_1000_noop_python(c: &mut Criterion) {
         ..Config::default()
     };
 
-    let state = rt
-        .block_on(AppState::try_new(config.clone()))
-        .expect("failed to create AppState");
-    let app = router(state.clone());
+    let (state, addr, shutdown, server_handle) = rt.block_on(async {
+        let state = AppState::try_new(config.clone())
+            .await
+            .expect("failed to create AppState");
+        let app = router(state.clone());
 
-    let listener = rt
-        .block_on(TcpListener::bind((config.bind.as_str(), 0)))
-        .unwrap();
-    let addr = listener.local_addr().unwrap();
-
-    let shutdown = CancellationToken::new();
-    let shutdown_clone = shutdown.clone();
-    let server_handle = rt.spawn(async move {
-        axum::serve(listener, app)
-            .with_graceful_shutdown(shutdown_clone.cancelled_owned())
+        let listener = TcpListener::bind((config.bind.as_str(), 0))
             .await
             .unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        let shutdown = CancellationToken::new();
+        let shutdown_clone = shutdown.clone();
+        let server_handle = tokio::spawn(async move {
+            axum::serve(listener, app)
+                .with_graceful_shutdown(shutdown_clone.cancelled_owned())
+                .await
+                .unwrap();
+        });
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        (state, addr, shutdown, server_handle)
     });
-    std::thread::sleep(Duration::from_millis(50));
 
     let client = Client::new();
 
@@ -106,7 +109,7 @@ fn bench_submit_1000_noop_python(c: &mut Criterion) {
 
     static LATENCIES: Mutex<Vec<Duration>> = Mutex::new(Vec::new());
 
-    let mut group = c.benchmark_group("noop_python_submit");
+    let mut group = c.benchmark_group("noop_shell_submit");
     group.throughput(Throughput::Elements(1000));
     group.warm_up_time(Duration::from_secs(2));
     group.sample_size(10);
@@ -140,9 +143,11 @@ fn bench_submit_1000_noop_python(c: &mut Criterion) {
     });
     group.finish();
 
-    shutdown.cancel();
-    let _ = rt.block_on(tokio::time::timeout(Duration::from_secs(5), server_handle));
-    rt.block_on(state.vee.stop());
+    rt.block_on(async {
+        shutdown.cancel();
+        let _ = tokio::time::timeout(Duration::from_secs(5), server_handle).await;
+        state.vee.stop().await;
+    });
 
     let mut all: Vec<f64> = LATENCIES
         .lock()
@@ -156,11 +161,11 @@ fn bench_submit_1000_noop_python(c: &mut Criterion) {
         let p99 = percentile(&all, 0.99);
         let throughput = if p50 > 0.0 { 1000.0 / p50 } else { 0.0 };
         eprintln!(
-            "\nvico-vee noop Python submit distribution (N={}): p50={:.3}ms, p99={:.3}ms, approx throughput={:.1} tasks/s",
+            "\nvico-vee noop shell submit distribution (N={}): p50={:.3}ms, p99={:.3}ms, approx throughput={:.1} tasks/s",
             all.len(), p50, p99, throughput
         );
     }
 }
 
-criterion_group!(benches, bench_submit_1000_noop_python);
+criterion_group!(benches, bench_submit_1000_noop_shell);
 criterion_main!(benches);

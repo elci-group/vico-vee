@@ -5,6 +5,7 @@ mod common;
 use common::*;
 use flate2::write::GzEncoder;
 use flate2::Compression;
+use rand::Rng;
 use reqwest::{Client, StatusCode};
 use std::io::Read;
 use std::time::Duration;
@@ -84,19 +85,33 @@ async fn graceful_shutdown_under_load_preserves_terminal_statuses() {
             let tx = tx.clone();
             let id = counter;
             tokio::spawn(async move {
-                let resp = submit_code(
-                    &client,
-                    &addr,
-                    ADMIN_TOKEN,
-                    "shell",
-                    "sleep 0.5",
-                    &format!("chaos-agent-{id}"),
-                    None,
-                )
-                .await;
-                if let Ok(json) = resp.json::<serde_json::Value>().await {
-                    if let Some(exec_id) = json["execution_id"].as_str() {
-                        let _ = tx.send(exec_id.to_string());
+                let url = format!("http://{}/vee/submit", addr);
+                let body = serde_json::json!({
+                    "agent_id": format!("chaos-agent-{id}"),
+                    "language": "shell",
+                    "source_code": "sleep 0.5",
+                    "capabilities": ["process_spawn"],
+                    "budget": {
+                        "cpu_seconds": 30,
+                        "memory_mb": 128,
+                        "disk_mb": 100,
+                        "token_budget": 1000,
+                        "wall_clock_seconds": 30,
+                    },
+                });
+                if let Ok(resp) = client
+                    .post(&url)
+                    .bearer_auth(ADMIN_TOKEN)
+                    .json(&body)
+                    .send()
+                    .await
+                {
+                    if resp.status().is_success() {
+                        if let Ok(json) = resp.json::<serde_json::Value>().await {
+                            if let Some(exec_id) = json["execution_id"].as_str() {
+                                let _ = tx.send(exec_id.to_string());
+                            }
+                        }
                     }
                 }
             });

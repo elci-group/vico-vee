@@ -8,7 +8,6 @@ use serde_json::{json, Value};
 use std::time::Duration;
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
-use vico_vee::config::RateLimitConfig;
 use vico_vee::server::{router, AppState};
 
 #[tokio::test]

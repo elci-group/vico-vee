@@ -12,7 +12,9 @@ use vico_vee::config::{ApiKeysConfig, Config, RateLimitConfig};
 use vico_vee::server::{router, AppState};
 
 pub const ADMIN_TOKEN: &str = "test-admin-token";
+#[allow(dead_code)]
 pub const SUBMIT_TOKEN: &str = "test-submit-token";
+#[allow(dead_code)]
 pub const READ_TOKEN: &str = "test-read-token";
 
 const API_KEYS_TOML: &str = r#"
@@ -35,11 +37,13 @@ pub struct TestServer {
     pub state: AppState,
     pub shutdown: CancellationToken,
     pub handle: tokio::task::JoinHandle<()>,
+    #[allow(dead_code)]
     pub tmp: TempDir,
 }
 
 impl TestServer {
     /// Build an HTTP URL for `path`.
+    #[allow(dead_code)]
     pub fn url(&self, path: &str) -> String {
         format!("http://{}{}", self.addr, path)
     }
@@ -218,6 +222,7 @@ pub async fn python_execution_available(server: &TestServer) -> bool {
 }
 
 /// Generate a self-signed certificate/key pair using `openssl`.
+#[allow(dead_code)]
 pub fn generate_self_signed_cert(tmp: &TempDir) -> Option<(PathBuf, PathBuf)> {
     let key_path = tmp.path().join("key.pem");
     let cert_path = tmp.path().join("cert.pem");

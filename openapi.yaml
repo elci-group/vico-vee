@@ -1,0 +1,809 @@
+openapi: 3.1.0
+info:
+  title: vico-vee
+  description: |
+    Standalone ViCo Execution Environment service. Accepts sandboxed execution
+tasks, manages capability grants, persists artifacts, and exposes Osmosis patch
+review operations.
+  version: 1.0.0
+  contact:
+    name: ViCo Systems
+servers:
+  - url: http://localhost:9987
+    description: Default local vico-vee instance
+paths:
+  /health:
+    post:
+      operationId: healthCheck
+      summary: Service health check
+      description: Returns a lightweight liveness indicator.
+      responses:
+        "200":
+          description: Service is alive.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /vee/submit:
+    post:
+      operationId: submitExecution
+      summary: Submit an execution task
+      description: |
+        Submits a sandboxed execution task. The service issues capability grants
+and queues the task for execution.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VeeSubmitInput"
+      responses:
+        "200":
+          description: Task accepted or rejected.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VeeSubmitResponse"
+  /vee/status:
+    post:
+      operationId: getExecutionStatus
+      summary: Get execution status
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VeeExecutionIdInput"
+      responses:
+        "200":
+          description: Execution status or error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VeeStatusResponse"
+  /vee/cancel:
+    post:
+      operationId: cancelExecution
+      summary: Cancel an execution
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VeeExecutionIdInput"
+      responses:
+        "200":
+          description: Cancellation result.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VeeCancelResponse"
+  /vee/list:
+    post:
+      operationId: listExecutions
+      summary: List executions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VeeListInput"
+      responses:
+        "200":
+          description: Paginated list of execution results.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VeeListResponse"
+  /vee/artifacts:
+    post:
+      operationId: getExecutionArtifacts
+      summary: Get artifacts for an execution
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VeeExecutionIdInput"
+      responses:
+        "200":
+          description: Artifacts produced by the execution.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VeeArtifactsResponse"
+  /vee/dashboard:
+    post:
+      operationId: getDashboard
+      summary: Dashboard statistics
+      responses:
+        "200":
+          description: Aggregate execution statistics.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VeeDashboardResponse"
+  /vee/patterns:
+    post:
+      operationId: findPatterns
+      summary: Find learned patterns
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VeePatternInput"
+      responses:
+        "200":
+          description: Matching patterns.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VeePatternsResponse"
+  /vee/audit:
+    post:
+      operationId: runAudit
+      summary: Run audit suite
+      responses:
+        "200":
+          description: Audit report.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VeeAuditResponse"
+  /vee/checkpoints:
+    post:
+      operationId: getCheckpoints
+      summary: Checkpoint statistics
+      responses:
+        "200":
+          description: Checkpoint statistics.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VeeCheckpointsResponse"
+  /vee/odin/health:
+    post:
+      operationId: getOdinHealth
+      summary: ODIN health
+      responses:
+        "200":
+          description: ODIN health and available models.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VeeOdinHealthResponse"
+  /vee/odin/model:
+    post:
+      operationId: setOdinModel
+      summary: Set the active ODIN model
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OdinSetModelInput"
+      responses:
+        "200":
+          description: Model update confirmation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VeeOdinModelResponse"
+  /vee/diff:
+    post:
+      operationId: diffArtifacts
+      summary: Start an Osmosis diff
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OsmosisDiffInput"
+      responses:
+        "200":
+          description: Diff task submitted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OsmosisTaskResponse"
+  /vee/merge:
+    post:
+      operationId: mergeArtifacts
+      summary: Apply an Osmosis merge
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OsmosisMergeInput"
+      responses:
+        "200":
+          description: Merge task submitted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OsmosisTaskResponse"
+  /vee/reject:
+    post:
+      operationId: rejectArtifacts
+      summary: Reject an Osmosis patch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OsmosisRejectInput"
+      responses:
+        "200":
+          description: Reject task submitted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OsmosisTaskResponse"
+  /openapi.json:
+    get:
+      operationId: getOpenApiJson
+      summary: OpenAPI specification as JSON
+      responses:
+        "200":
+          description: OpenAPI JSON spec.
+          content:
+            application/json:
+              schema:
+                type: object
+  /docs:
+    get:
+      operationId: getDocs
+      summary: API documentation UI
+      responses:
+        "200":
+          description: Scalar API reference UI.
+          content:
+            text/html:
+              schema:
+                type: string
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - service
+      properties:
+        status:
+          type: string
+          example: ok
+        service:
+          type: string
+          example: vico-vee
+    VeeSubmitInput:
+      type: object
+      required:
+        - agent_id
+        - language
+        - source_code
+        - capabilities
+      properties:
+        run_id:
+          type: string
+          nullable: true
+        agent_id:
+          type: string
+        language:
+          type: string
+          enum:
+            - python
+            - rust
+            - javascript
+            - go
+            - context_bundle
+            - shell
+            - wasm
+        source_code:
+          type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+        budget:
+          $ref: "#/components/schemas/VeeBudgetRequest"
+          nullable: true
+        hypothesis:
+          type: object
+          nullable: true
+    VeeBudgetRequest:
+      type: object
+      properties:
+        cpu_seconds:
+          type: integer
+          nullable: true
+        memory_mb:
+          type: integer
+          nullable: true
+        disk_mb:
+          type: integer
+          nullable: true
+        token_budget:
+          type: integer
+          nullable: true
+        wall_clock_seconds:
+          type: integer
+          nullable: true
+    VeeSubmitResponse:
+      type: object
+      required:
+        - success
+      properties:
+        success:
+          type: boolean
+        execution_id:
+          type: string
+        status:
+          type: string
+        message:
+          type: string
+        error:
+          type: string
+    VeeExecutionIdInput:
+      type: object
+      required:
+        - execution_id
+      properties:
+        execution_id:
+          type: string
+    VeeStatusResponse:
+      type: object
+      required:
+        - success
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: "#/components/schemas/ExecutionResult"
+        error:
+          type: string
+    VeeCancelResponse:
+      type: object
+      required:
+        - success
+      properties:
+        success:
+          type: boolean
+        execution_id:
+          type: string
+        status:
+          type: string
+        error:
+          type: string
+    VeeListInput:
+      type: object
+      properties:
+        status:
+          type: string
+          nullable: true
+        _agent_id:
+          type: string
+          nullable: true
+        limit:
+          type: integer
+          default: 50
+    VeeListResponse:
+      type: object
+      required:
+        - success
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExecutionResult"
+    VeeArtifactsResponse:
+      type: object
+      required:
+        - success
+      properties:
+        success:
+          type: boolean
+        execution_id:
+          type: string
+        artifacts:
+          type: array
+          items:
+            type: object
+    VeeDashboardResponse:
+      type: object
+      required:
+        - success
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: "#/components/schemas/VeeDashboardStats"
+    VeeDashboardStats:
+      type: object
+      required:
+        - total
+        - completed
+        - failed
+        - pending
+        - avg_latency_ms
+      properties:
+        total:
+          type: integer
+        completed:
+          type: integer
+        failed:
+          type: integer
+        pending:
+          type: integer
+        avg_latency_ms:
+          type: integer
+    VeePatternInput:
+      type: object
+      properties:
+        tag:
+          type: string
+          nullable: true
+        limit:
+          type: integer
+          default: 50
+    VeePatternsResponse:
+      type: object
+      required:
+        - success
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/PatternRecord"
+    PatternRecord:
+      type: object
+      required:
+        - pattern_id
+        - description
+        - success_rate
+      properties:
+        pattern_id:
+          type: string
+        description:
+          type: string
+        success_rate:
+          type: number
+          format: double
+    VeeAuditResponse:
+      type: object
+      required:
+        - success
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: "#/components/schemas/AuditReportData"
+    AuditReportData:
+      type: object
+      required:
+        - overall_pass
+        - passed
+        - failed
+        - critical_failures
+        - timestamp
+        - tests
+      properties:
+        overall_pass:
+          type: boolean
+        passed:
+          type: integer
+        failed:
+          type: integer
+        critical_failures:
+          type: integer
+        timestamp:
+          type: string
+          format: date-time
+        tests:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditTest"
+    AuditTest:
+      type: object
+      required:
+        - name
+        - passed
+        - severity
+        - detail
+      properties:
+        name:
+          type: string
+        passed:
+          type: boolean
+        severity:
+          type: string
+        detail:
+          type: string
+    VeeCheckpointsResponse:
+      type: object
+      required:
+        - success
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+        error:
+          type: string
+    VeeOdinHealthResponse:
+      type: object
+      required:
+        - success
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: "#/components/schemas/OdinHealthData"
+    OdinHealthData:
+      type: object
+      required:
+        - healthy
+        - models
+      properties:
+        healthy:
+          type: boolean
+        models:
+          type: array
+          items:
+            type: string
+    OdinSetModelInput:
+      type: object
+      required:
+        - model
+      properties:
+        model:
+          type: string
+    VeeOdinModelResponse:
+      type: object
+      required:
+        - success
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+    OsmosisArtifactRef:
+      type: object
+      required:
+        - execution_id
+      properties:
+        execution_id:
+          type: string
+        artifact_id:
+          type: string
+          nullable: true
+    OsmosisDiffInput:
+      type: object
+      required:
+        - left_execution_id
+      properties:
+        left_execution_id:
+          type: string
+        left_artifact_id:
+          type: string
+          nullable: true
+        right_execution_id:
+          type: string
+          nullable: true
+        right_artifact_id:
+          type: string
+          nullable: true
+        target_path:
+          type: string
+          nullable: true
+        format:
+          type: string
+          enum:
+            - structured
+            - unified
+          nullable: true
+    OsmosisMergeInput:
+      type: object
+      required:
+        - source_execution_id
+        - target_path
+      properties:
+        source_execution_id:
+          type: string
+        source_artifact_id:
+          type: string
+          nullable: true
+        target_path:
+          type: string
+        strategy:
+          type: string
+          enum:
+            - overwrite
+            - append
+          nullable: true
+        base_execution_id:
+          type: string
+          nullable: true
+        base_artifact_id:
+          type: string
+          nullable: true
+    OsmosisRejectInput:
+      type: object
+      required:
+        - source_execution_id
+        - target_path
+      properties:
+        source_execution_id:
+          type: string
+        source_artifact_id:
+          type: string
+          nullable: true
+        target_path:
+          type: string
+        base_execution_id:
+          type: string
+          nullable: true
+        base_artifact_id:
+          type: string
+          nullable: true
+        reason:
+          type: string
+          nullable: true
+    OsmosisTaskResponse:
+      type: object
+      required:
+        - success
+      properties:
+        success:
+          type: boolean
+        execution_id:
+          type: string
+        status:
+          type: string
+        error:
+          type: string
+    ExecutionResult:
+      type: object
+      required:
+        - execution_id
+        - status
+        - phase
+        - artifacts
+        - confidence
+        - tokens_consumed
+        - cpu_seconds_used
+        - memory_peak_mb
+        - latency_ms
+        - created_at
+      properties:
+        execution_id:
+          type: string
+        status:
+          $ref: "#/components/schemas/ExecutionStatus"
+        phase:
+          $ref: "#/components/schemas/ExecutionPhase"
+        artifacts:
+          type: array
+          items:
+            $ref: "#/components/schemas/Artifact"
+        validation:
+          $ref: "#/components/schemas/ValidationResult"
+          nullable: true
+        confidence:
+          type: number
+          format: double
+        tokens_consumed:
+          type: integer
+        cpu_seconds_used:
+          type: number
+          format: double
+        memory_peak_mb:
+          type: number
+          format: double
+        latency_ms:
+          type: integer
+        error_log:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+    ExecutionStatus:
+      type: string
+      enum:
+        - Pending
+        - Queued
+        - Simulating
+        - Executing
+        - Validating
+        - Completed
+        - Failed
+        - Recovered
+        - Cancelled
+    ExecutionPhase:
+      type: string
+      enum:
+        - Hypothesis
+        - Simulation
+        - Execution
+        - Validation
+        - Feedback
+    Artifact:
+      type: object
+      required:
+        - type
+        - data
+      properties:
+        type:
+          type: string
+        data:
+          type: object
+    ValidationResult:
+      type: object
+      required:
+        - hypothesis_validated
+        - checks
+        - confidence
+        - deviations
+      properties:
+        hypothesis_validated:
+          type: boolean
+        checks:
+          type: array
+          items:
+            $ref: "#/components/schemas/ValidationCheck"
+        confidence:
+          type: number
+          format: double
+        deviations:
+          type: array
+          items:
+            $ref: "#/components/schemas/Deviation"
+    ValidationCheck:
+      type: object
+      required:
+        - name
+        - passed
+        - detail
+      properties:
+        name:
+          type: string
+        passed:
+          type: boolean
+        detail:
+          type: string
+    Deviation:
+      type: object
+      required:
+        - field
+        - expected
+        - actual
+        - severity
+      properties:
+        field:
+          type: string
+        expected:
+          type: string
+        actual:
+          type: string
+        severity:
+          $ref: "#/components/schemas/DeviationSeverity"
+    DeviationSeverity:
+      type: string
+      enum:
+        - Minor
+        - Major
+        - Critical

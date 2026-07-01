@@ -15,6 +15,7 @@ use tokio::sync::Mutex;
 
 use crate::{
     capability::CapabilityRegistry,
+    openapi::{docs, openapi_json},
     types::{
         Capability, ExecutionLanguage, ExecutionTask, OsmosisArtifactRef, OsmosisDiffRequest,
         OsmosisMergeRequest, OsmosisOperation, OsmosisRejectRequest, Provenance,
@@ -64,6 +65,8 @@ impl AppState {
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/health", post(health))
+        .route("/openapi.json", get(openapi_json))
+        .route("/docs", get(docs))
         .route("/vee/submit", post(vee_submit))
         .route("/vee/status", post(vee_status))
         .route("/vee/cancel", post(vee_cancel))

@@ -10,7 +10,7 @@ use vico_vee::config::{Cli, Config, LogFormat};
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
-    let config = Config::load(cli)?;
+    let config = Config::load(Some(cli))?;
 
     let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| "vico_vee=info,tower_http=info".into());
@@ -26,6 +26,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             tracing_subscriber::registry()
                 .with(env_filter)
                 .with(tracing_subscriber::fmt::layer())
+                .init();
+        }
+        LogFormat::Compact => {
+            tracing_subscriber::registry()
+                .with(env_filter)
+                .with(tracing_subscriber::fmt::layer().compact())
                 .init();
         }
     }

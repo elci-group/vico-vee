@@ -88,10 +88,6 @@ impl RuntimeWorker for PythonWorker {
             .caps
             .iter()
             .any(|c| matches!(c, Capability::NetworkAccess { .. } | Capability::NetworkDns));
-        config.executable_paths.extend([
-            std::path::PathBuf::from("/usr/bin"),
-            std::path::PathBuf::from("/bin"),
-        ]);
 
         // Run with wall-clock timeout
         let exec_future = tokio::task::spawn_blocking(move || run_sandboxed(cmd, &config));

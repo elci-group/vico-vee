@@ -84,9 +84,7 @@ fn bench_submit_1000_noop_shell(c: &mut Criterion) {
             .expect("failed to create AppState");
         let app = router(state.clone());
 
-        let listener = TcpListener::bind((config.bind.as_str(), 0))
-            .await
-            .unwrap();
+        let listener = TcpListener::bind((config.bind.as_str(), 0)).await.unwrap();
         let addr = listener.local_addr().unwrap();
 
         let shutdown = CancellationToken::new();

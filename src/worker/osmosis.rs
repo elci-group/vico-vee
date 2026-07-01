@@ -108,7 +108,7 @@ impl RuntimeWorker for OsmosisWorker {
                 }
                 let result = self
                     .engine
-                    .diff(project_root.as_deref(), &req, task.project_id.as_deref())
+                    .diff(project_root.as_deref(), &req)
                     .await
                     .map_err(osmosis_error)?;
                 let mut artifacts = vec![Artifact::Json {
@@ -137,7 +137,7 @@ impl RuntimeWorker for OsmosisWorker {
                 }
                 let result = self
                     .engine
-                    .merge(project_root.as_deref(), &req, task.project_id.as_deref())
+                    .merge(project_root.as_deref(), &req)
                     .await
                     .map_err(osmosis_error)?;
                 Ok(vec![
@@ -168,7 +168,7 @@ impl RuntimeWorker for OsmosisWorker {
                 }
                 let result = self
                     .engine
-                    .reject(project_root.as_deref(), &req, task.project_id.as_deref())
+                    .reject(project_root.as_deref(), &req)
                     .await
                     .map_err(osmosis_error)?;
                 Ok(vec![

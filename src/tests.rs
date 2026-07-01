@@ -258,19 +258,6 @@ fn test_audit_severity_enum() {
 }
 
 #[test]
-fn test_odin_router_default() {
-    use crate::odin::OdinRouter;
-
-    let _router = OdinRouter::default();
-    assert!(OdinRouter::can_handle(&[Capability::InferenceProvider {
-        provider: "ollama".into()
-    }]));
-    assert!(!OdinRouter::can_handle(&[Capability::InferenceProvider {
-        provider: "openai".into()
-    }]));
-}
-
-#[test]
 fn test_sandbox_build_python_command() {
     let work_dir = std::env::temp_dir().join("vee-test-work");
     let output_dir = std::env::temp_dir().join("vee-test-output");

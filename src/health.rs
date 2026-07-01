@@ -73,28 +73,23 @@ impl MetricsRegistry {
     }
 
     /// Update gauges derived from the current execution store.
-    pub fn refresh_daemon_gauges(&self, state: &crate::server::AppState) {
-        // Spawn a short-lived async block because dashboard_stats is async.
-        let registry = self.clone();
-        let state = state.clone();
-        tokio::spawn(async move {
-            let stats = state
-                .vee
-                .dashboard_stats(Some(crate::tenant::DEFAULT_PROJECT))
-                .await;
-            if let Some(total) = stats.get("total").and_then(|v| v.as_i64()) {
-                registry.gauge_set("vee_executions_total", total as f64);
-            }
-            if let Some(pending) = stats.get("pending").and_then(|v| v.as_i64()) {
-                registry.gauge_set("vee_executions_pending", pending as f64);
-            }
-            if let Some(completed) = stats.get("completed").and_then(|v| v.as_i64()) {
-                registry.gauge_set("vee_executions_completed", completed as f64);
-            }
-            if let Some(failed) = stats.get("failed").and_then(|v| v.as_i64()) {
-                registry.gauge_set("vee_executions_failed", failed as f64);
-            }
-        });
+    pub async fn refresh_daemon_gauges(&self, state: &crate::server::AppState) {
+        let stats = state
+            .vee
+            .dashboard_stats(Some(crate::tenant::DEFAULT_PROJECT))
+            .await;
+        if let Some(total) = stats.get("total").and_then(|v| v.as_i64()) {
+            self.gauge_set("vee_executions_total", total as f64);
+        }
+        if let Some(pending) = stats.get("pending").and_then(|v| v.as_i64()) {
+            self.gauge_set("vee_executions_pending", pending as f64);
+        }
+        if let Some(completed) = stats.get("completed").and_then(|v| v.as_i64()) {
+            self.gauge_set("vee_executions_completed", completed as f64);
+        }
+        if let Some(failed) = stats.get("failed").and_then(|v| v.as_i64()) {
+            self.gauge_set("vee_executions_failed", failed as f64);
+        }
     }
 }
 
@@ -138,7 +133,7 @@ pub async fn ready(State(state): State<crate::server::AppState>) -> impl IntoRes
 
 /// `GET /metrics` — Prometheus text-format metrics.
 pub async fn metrics(State(state): State<crate::server::AppState>) -> impl IntoResponse {
-    state.metrics.refresh_daemon_gauges(&state);
+    state.metrics.refresh_daemon_gauges(&state).await;
     let body = state.metrics.render();
 
     (

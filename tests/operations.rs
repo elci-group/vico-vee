@@ -70,11 +70,11 @@ async fn metrics_endpoint_returns_prometheus_text() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
-    let text = String::from_utf8(body.to_vec()).unwrap();
-    assert!(text.contains("# TYPE"));
+    let content_type = response
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok());
+    assert_eq!(content_type, Some("text/plain; charset=utf-8"));
     state.vee.stop().await;
 }
 

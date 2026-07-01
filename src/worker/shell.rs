@@ -103,7 +103,10 @@ impl RuntimeWorker for ShellWorker {
             work_dir: work_dir.clone(),
             output_dir: output_dir.clone(),
             input_paths: vec![],
-            executable_paths: vec![],
+            executable_paths: vec![
+                std::path::PathBuf::from("/usr/bin"),
+                std::path::PathBuf::from("/bin"),
+            ],
             budget: self.budget.clone(),
             capabilities: self.caps.clone(),
             block_network: !self

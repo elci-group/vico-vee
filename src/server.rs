@@ -11,12 +11,19 @@ use axum::{
 };
 use serde::Deserialize;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::Mutex;
+use tower::ServiceBuilder;
+use tower::timeout::TimeoutLayer;
+use tower_http::limit::RequestBodyLimitLayer;
 
 use crate::{
+    auth::AuthKeys,
+    backup::{admin_backup, admin_restore},
     capability::CapabilityRegistry,
+    health::{health, metrics, ready, set_request_id, MetricsRegistry},
+    limit::RateLimiter,
     openapi::{docs, openapi_json},
-    tenant::ProjectContext,
     types::{
         Capability, ExecutionLanguage, ExecutionTask, OsmosisArtifactRef, OsmosisDiffRequest,
         OsmosisMergeRequest, OsmosisOperation, OsmosisRejectRequest, Provenance,
@@ -33,6 +40,9 @@ pub struct AppState {
     pub vee: Arc<ExecutorDaemon>,
     pub capability_issuer: Arc<Mutex<CapabilityRegistry>>,
     pub config: Config,
+    pub metrics: MetricsRegistry,
+    pub auth_keys: Arc<AuthKeys>,
+    pub rate_limiter: Arc<RateLimiter>,
 }
 
 impl AppState {
@@ -47,6 +57,9 @@ impl AppState {
         crate::migrations::run_migrations(&conn, crate::migrations::MIGRATIONS)
             .map_err(|e| format!("run startup migrations: {e}"))?;
         drop(conn);
+
+        let auth_keys = Arc::new(AuthKeys::load(&config.api_keys).map_err(|e| format!("auth: {e}"))?);
+        let rate_limiter = Arc::new(RateLimiter::new(config.rate_limit.clone()));
 
         let key_dir = config.data_dir.join("keys");
         let revocation_dir = config.data_dir.join("revocations");
@@ -68,15 +81,65 @@ impl AppState {
             vee,
             capability_issuer,
             config,
+            metrics: MetricsRegistry::default(),
+            auth_keys,
+            rate_limiter,
         })
+    }
+
+    /// Test-only constructor that avoids keyring/network dependencies.
+    #[cfg(test)]
+    pub fn test_new(config: Config) -> Self {
+        use crate::auth::{ApiKey, ApiKeysFile};
+        use std::collections::HashMap;
+
+        let mut keys = HashMap::new();
+        keys.insert(
+            "admin".to_string(),
+            ApiKey {
+                token: "test-admin-token".to_string(),
+                scopes: vec!["submit".to_string(), "read".to_string(), "admin".to_string()],
+            },
+        );
+        keys.insert(
+            "submit".to_string(),
+            ApiKey {
+                token: "test-submit-token".to_string(),
+                scopes: vec!["submit".to_string()],
+            },
+        );
+        keys.insert(
+            "read".to_string(),
+            ApiKey {
+                token: "test-read-token".to_string(),
+                scopes: vec!["read".to_string()],
+            },
+        );
+        let auth_keys = Arc::new(AuthKeys::from_map(keys, true));
+        let rate_limiter = Arc::new(RateLimiter::new(config.rate_limit.clone()));
+        let capability_issuer = Arc::new(Mutex::new(CapabilityRegistry::new_with_seed([0u8; 32])));
+        let vee = Arc::new(ExecutorDaemon::new());
+
+        Self {
+            vee,
+            capability_issuer,
+            config,
+            metrics: MetricsRegistry::default(),
+            auth_keys,
+            rate_limiter,
+        }
     }
 }
 
 /// All HTTP routes registered by the vico-vee router, used by OpenAPI tests.
 pub const ROUTES: &[&str] = &[
     "/health",
+    "/ready",
+    "/metrics",
     "/openapi.json",
     "/docs",
+    "/admin/backup",
+    "/admin/restore",
     "/vee/submit",
     "/vee/status",
     "/vee/cancel",
@@ -94,10 +157,21 @@ pub const ROUTES: &[&str] = &[
 ];
 
 pub fn router(state: AppState) -> Router {
+    let body_limit = state
+        .config
+        .body_limit_mb
+        .saturating_mul(1024)
+        .saturating_mul(1024);
+    let timeout = Duration::from_secs(state.config.request_timeout_secs);
+
     Router::new()
-        .route("/health", post(health))
+        .route("/health", get(health))
+        .route("/ready", get(ready))
+        .route("/metrics", get(metrics))
         .route("/openapi.json", get(openapi_json))
         .route("/docs", get(docs))
+        .route("/admin/backup", post(admin_backup))
+        .route("/admin/restore", post(admin_restore))
         .route("/vee/submit", post(vee_submit))
         .route("/vee/status", post(vee_status))
         .route("/vee/cancel", post(vee_cancel))
@@ -112,11 +186,25 @@ pub fn router(state: AppState) -> Router {
         .route("/vee/diff", post(vee_diff))
         .route("/vee/merge", post(vee_merge))
         .route("/vee/reject", post(vee_reject))
+        .layer(
+            ServiceBuilder::new()
+                .layer(TimeoutLayer::new(timeout))
+                .layer(axum::middleware::from_fn_with_state(
+                    state.clone(),
+                    crate::limit::agent_rate_limit_middleware,
+                ))
+                .layer(axum::middleware::from_fn_with_state(
+                    state.clone(),
+                    crate::auth::auth_middleware,
+                ))
+                .layer(axum::middleware::from_fn(set_request_id))
+                .layer(axum::middleware::from_fn_with_state(
+                    state.clone(),
+                    crate::limit::ip_rate_limit_middleware,
+                ))
+                .layer(RequestBodyLimitLayer::new(body_limit)),
+        )
         .with_state(state)
-}
-
-async fn health() -> JsonResponse<serde_json::Value> {
-    JsonResponse(serde_json::json!({"status": "ok", "service": "vico-vee"}))
 }
 
 #[derive(Debug, Deserialize)]
@@ -132,7 +220,6 @@ pub struct VeeSubmitInput {
 
 pub async fn vee_submit(
     State(state): State<AppState>,
-    project: ProjectContext,
     Json(input): Json<VeeSubmitInput>,
 ) -> JsonResponse<serde_json::Value> {
     let language = match input.language.as_str() {
@@ -174,7 +261,6 @@ pub async fn vee_submit(
         artifact_id: format!("prov-{}", execution_id),
         task_id: execution_id.clone(),
         execution_id: execution_id.clone(),
-        project_id: Some(project.project_id.clone()),
         creator_agent: input.agent_id.clone(),
         parent_artifacts: vec![],
         code_generator: input.agent_id.clone(),
@@ -189,7 +275,6 @@ pub async fn vee_submit(
         execution_id: execution_id.clone(),
         run_id: input.run_id,
         agent_id: input.agent_id,
-        project_id: Some(project.project_id.clone()),
         language,
         source_code: input.source_code,
         capabilities,
@@ -222,14 +307,9 @@ pub struct VeeExecutionIdInput {
 
 pub async fn vee_status(
     State(state): State<AppState>,
-    project: ProjectContext,
     Json(input): Json<VeeExecutionIdInput>,
 ) -> JsonResponse<serde_json::Value> {
-    match state
-        .vee
-        .get_status(&input.execution_id, Some(&project.project_id))
-        .await
-    {
+    match state.vee.get_status(&input.execution_id).await {
         Some(result) => JsonResponse(serde_json::json!({ "success": true, "data": result })),
         None => JsonResponse(serde_json::json!({
             "success": false,
@@ -240,14 +320,9 @@ pub async fn vee_status(
 
 pub async fn vee_cancel(
     State(state): State<AppState>,
-    project: ProjectContext,
     Json(input): Json<VeeExecutionIdInput>,
 ) -> JsonResponse<serde_json::Value> {
-    match state
-        .vee
-        .cancel(&input.execution_id, Some(&project.project_id))
-        .await
-    {
+    match state.vee.cancel(&input.execution_id).await {
         Ok(()) => JsonResponse(serde_json::json!({
             "success": true,
             "execution_id": input.execution_id,
@@ -276,7 +351,6 @@ pub fn default_vee_limit() -> usize {
 
 pub async fn vee_list(
     State(state): State<AppState>,
-    project: ProjectContext,
     Json(input): Json<VeeListInput>,
 ) -> JsonResponse<serde_json::Value> {
     let status_filter = input.status.and_then(|s| match s.as_str() {
@@ -289,10 +363,7 @@ pub async fn vee_list(
         _ => None,
     });
 
-    let mut results = state
-        .vee
-        .list(status_filter, Some(&project.project_id))
-        .await;
+    let mut results = state.vee.list(status_filter).await;
     results.truncate(input.limit);
 
     JsonResponse(serde_json::json!({ "success": true, "data": results }))
@@ -300,13 +371,9 @@ pub async fn vee_list(
 
 pub async fn vee_artifacts(
     State(state): State<AppState>,
-    project: ProjectContext,
     Json(input): Json<VeeExecutionIdInput>,
 ) -> JsonResponse<serde_json::Value> {
-    let artifacts = state
-        .vee
-        .get_artifacts(&input.execution_id, Some(&project.project_id))
-        .await;
+    let artifacts = state.vee.get_artifacts(&input.execution_id).await;
     let artifacts_json: Vec<serde_json::Value> = artifacts
         .into_iter()
         .map(|(id, artifact)| {
@@ -323,11 +390,8 @@ pub async fn vee_artifacts(
     }))
 }
 
-pub async fn vee_dashboard(
-    State(state): State<AppState>,
-    project: ProjectContext,
-) -> JsonResponse<serde_json::Value> {
-    let stats = state.vee.dashboard_stats(Some(&project.project_id)).await;
+pub async fn vee_dashboard(State(state): State<AppState>) -> JsonResponse<serde_json::Value> {
+    let stats = state.vee.dashboard_stats().await;
     JsonResponse(serde_json::json!({ "success": true, "data": stats }))
 }
 
@@ -445,7 +509,6 @@ pub struct OsmosisRejectInput {
 
 async fn submit_osmosis_task(
     state: &AppState,
-    project: &ProjectContext,
     agent_id: &str,
     operation: OsmosisOperation,
     capabilities: Vec<Capability>,
@@ -478,7 +541,7 @@ async fn submit_osmosis_task(
         artifact_id: format!("prov-{}", execution_id),
         task_id: execution_id.clone(),
         execution_id: execution_id.clone(),
-        project_id: Some(project.project_id.clone()),
+        project_id: Some(DEFAULT_PROJECT.to_string()),
         creator_agent: agent_id.to_string(),
         parent_artifacts: vec![],
         code_generator: agent_id.to_string(),
@@ -493,7 +556,7 @@ async fn submit_osmosis_task(
         execution_id: execution_id.clone(),
         run_id: None,
         agent_id: agent_id.to_string(),
-        project_id: Some(project.project_id.clone()),
+        project_id: Some(DEFAULT_PROJECT.to_string()),
         language: ExecutionLanguage::Osmosis,
         source_code: payload.to_string(),
         capabilities,
@@ -515,7 +578,6 @@ async fn submit_osmosis_task(
 
 pub async fn vee_diff(
     State(state): State<AppState>,
-    project: ProjectContext,
     Json(input): Json<OsmosisDiffInput>,
 ) -> JsonResponse<serde_json::Value> {
     let format = input.format.as_deref().map(|f| match f {
@@ -541,7 +603,6 @@ pub async fn vee_diff(
 
     match submit_osmosis_task(
         &state,
-        &project,
         "osmosis",
         operation,
         vec![Capability::FilesystemRead {
@@ -561,7 +622,6 @@ pub async fn vee_diff(
 
 pub async fn vee_merge(
     State(state): State<AppState>,
-    project: ProjectContext,
     Json(input): Json<OsmosisMergeInput>,
 ) -> JsonResponse<serde_json::Value> {
     let strategy = input.strategy.as_deref().map(|s| match s {
@@ -597,7 +657,7 @@ pub async fn vee_merge(
         },
     ];
 
-    match submit_osmosis_task(&state, &project, "osmosis", operation, capabilities).await {
+    match submit_osmosis_task(&state, "osmosis", operation, capabilities).await {
         Ok(execution_id) => JsonResponse(serde_json::json!({
             "success": true,
             "execution_id": execution_id,
@@ -609,7 +669,6 @@ pub async fn vee_merge(
 
 pub async fn vee_reject(
     State(state): State<AppState>,
-    project: ProjectContext,
     Json(input): Json<OsmosisRejectInput>,
 ) -> JsonResponse<serde_json::Value> {
     let source = OsmosisArtifactRef {
@@ -640,12 +699,187 @@ pub async fn vee_reject(
         },
     ];
 
-    match submit_osmosis_task(&state, &project, "osmosis", operation, capabilities).await {
+    match submit_osmosis_task(&state, "osmosis", operation, capabilities).await {
         Ok(execution_id) => JsonResponse(serde_json::json!({
             "success": true,
             "execution_id": execution_id,
             "status": "pending",
         })),
         Err(e) => JsonResponse(serde_json::json!({ "success": false, "error": e })),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use tower::ServiceExt;
+
+    fn test_state() -> AppState {
+        let mut config = Config::default();
+        config.rate_limit.per_sec = 100;
+        config.rate_limit.burst = 100;
+        config.rate_limit.exec_per_sec = 100;
+        config.rate_limit.exec_burst = 100;
+        AppState::test_new(config)
+    }
+
+    #[tokio::test]
+    async fn public_health_endpoint_requires_no_auth() {
+        let state = test_state();
+        let app = router(state);
+        let response = app
+            .oneshot(Request::get("/health").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn protected_endpoint_rejects_missing_auth() {
+        let state = test_state();
+        let app = router(state);
+        let response = app
+            .oneshot(
+                Request::post("/vee/dashboard")
+                    .header("content-type", "application/json")
+                    .body(Body::from("{}"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn protected_endpoint_rejects_wrong_scope() {
+        let state = test_state();
+        let app = router(state);
+        let response = app
+            .oneshot(
+                Request::post("/vee/dashboard")
+                    .header("authorization", "Bearer test-submit-token")
+                    .header("content-type", "application/json")
+                    .body(Body::from("{}"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn protected_endpoint_accepts_valid_scope() {
+        let state = test_state();
+        let app = router(state);
+        let response = app
+            .oneshot(
+                Request::post("/vee/dashboard")
+                    .header("authorization", "Bearer test-read-token")
+                    .header("content-type", "application/json")
+                    .body(Body::from("{}"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn admin_endpoint_requires_admin_scope() {
+        let state = test_state();
+        let app = router(state);
+        let response = app
+            .oneshot(
+                Request::post("/vee/odin/model")
+                    .header("authorization", "Bearer test-read-token")
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"model":"test"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn per_ip_rate_limit_returns_429() {
+        let mut config = Config::default();
+        config.rate_limit.per_sec = 1;
+        config.rate_limit.burst = 1;
+        config.rate_limit.exec_per_sec = 100;
+        config.rate_limit.exec_burst = 100;
+        let state = AppState::test_new(config);
+        let app = router(state);
+
+        // First request succeeds.
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post("/vee/dashboard")
+                    .header("authorization", "Bearer test-read-token")
+                    .header("content-type", "application/json")
+                    .body(Body::from("{}"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // Immediate second request from the same IP is rate limited.
+        let response = app
+            .oneshot(
+                Request::post("/vee/dashboard")
+                    .header("authorization", "Bearer test-read-token")
+                    .header("content-type", "application/json")
+                    .body(Body::from("{}"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert!(response.headers().contains_key("retry-after"));
+    }
+
+    #[tokio::test]
+    async fn per_agent_rate_limit_returns_429() {
+        let mut config = Config::default();
+        config.rate_limit.per_sec = 100;
+        config.rate_limit.burst = 100;
+        config.rate_limit.exec_per_sec = 1;
+        config.rate_limit.exec_burst = 1;
+        let state = AppState::test_new(config);
+        let app = router(state);
+
+        let body = r#"{"agent_id":"flood-agent","language":"python","source_code":"pass","capabilities":[]}"#;
+
+        // First submission succeeds.
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post("/vee/submit")
+                    .header("authorization", "Bearer test-submit-token")
+                    .header("content-type", "application/json")
+                    .body(Body::from(body))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // Immediate second submission from the same agent is rate limited.
+        let response = app
+            .oneshot(
+                Request::post("/vee/submit")
+                    .header("authorization", "Bearer test-submit-token")
+                    .header("content-type", "application/json")
+                    .body(Body::from(body))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert!(response.headers().contains_key("retry-after"));
     }
 }

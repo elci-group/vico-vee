@@ -156,9 +156,7 @@ pub async fn set_request_id(mut request: Request<Body>, next: Next) -> Response 
         Err(_) => header::HeaderValue::from_static("invalid-request-id"),
     };
 
-    request
-        .headers_mut()
-        .insert("x-request-id", header_value.clone());
+    request.headers_mut().insert("x-request-id", header_value.clone());
 
     let mut response = next.run(request).await;
     response.headers_mut().insert("x-request-id", header_value);

@@ -829,6 +829,7 @@ async fn test_worker_accepts_valid_grant_and_executes() {
         },
         hypothesis: None,
         provenance: Provenance::default(),
+        project_id: None,
     };
 
     worker
@@ -869,13 +870,14 @@ async fn test_daemon_submit_python_task_completes_with_stdout_artifact() {
         },
         hypothesis: None,
         provenance: Provenance::default(),
+        project_id: None,
     };
 
     daemon.submit(task).await.expect("submit should succeed");
 
     let mut final_result = None;
     for _ in 0..50 {
-        if let Some(r) = daemon.get_status(execution_id).await {
+        if let Some(r) = daemon.get_status(execution_id, None).await {
             if matches!(
                 r.status,
                 ExecutionStatus::Completed | ExecutionStatus::Failed | ExecutionStatus::Cancelled
@@ -941,17 +943,18 @@ async fn test_daemon_submit_then_cancel_marks_cancelled() {
         },
         hypothesis: None,
         provenance: Provenance::default(),
+        project_id: None,
     };
 
     daemon.submit(task).await.expect("submit should succeed");
     tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
     daemon
-        .cancel(execution_id)
+        .cancel(execution_id, None)
         .await
         .expect("cancel should succeed");
 
     let status = daemon
-        .get_status(execution_id)
+        .get_status(execution_id, None)
         .await
         .expect("result should exist");
     assert_eq!(status.status, ExecutionStatus::Cancelled);
@@ -976,6 +979,7 @@ async fn test_daemon_submit_without_grant_rejects() {
         budget: ExecutionBudget::default(),
         hypothesis: None,
         provenance: Provenance::default(),
+        project_id: None,
     };
 
     let result = daemon.submit(task).await;

@@ -87,9 +87,7 @@ impl TlsReloader {
     #[cfg(unix)]
     pub fn spawn_sighup_reloader(self) {
         tokio::spawn(async move {
-            let mut stream = match tokio::signal::unix::signal(
-                tokio::signal::unix::SignalKind::hangup(),
-            ) {
+            let mut stream = match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::hangup()) {
                 Ok(s) => s,
                 Err(e) => {
                     tracing::warn!(error = %e, "failed to install SIGHUP handler; cert hot-reload disabled");

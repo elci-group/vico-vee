@@ -70,9 +70,7 @@ fn validate_project_id(raw: &str) -> Result<String, String> {
         return Err("project id is empty".into());
     }
     if id.len() > MAX_PROJECT_ID_LEN {
-        return Err(format!(
-            "project id exceeds {MAX_PROJECT_ID_LEN} characters"
-        ));
+        return Err(format!("project id exceeds {MAX_PROJECT_ID_LEN} characters"));
     }
     if !id
         .chars()

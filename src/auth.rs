@@ -132,6 +132,8 @@ pub fn required_scope_for_path(path: &str) -> Option<&'static str> {
         | "/vee/audit" | "/vee/checkpoints" => Some("read"),
         // Administrative ODIN control.
         "/vee/odin/health" | "/vee/odin/model" => Some("admin"),
+        // Data lifecycle administration.
+        "/admin/backup" | "/admin/restore" => Some("admin"),
         _ => Some("read"),
     }
 }
@@ -161,10 +163,13 @@ pub async fn auth_middleware(
             }
         }
         Some(value) => {
-            state.auth_keys.check(value, scope).map_err(|e| match e {
-                AuthError::Missing | AuthError::Invalid => StatusCode::UNAUTHORIZED,
-                AuthError::Forbidden => StatusCode::FORBIDDEN,
-            })?;
+            state
+                .auth_keys
+                .check(value, scope)
+                .map_err(|e| match e {
+                    AuthError::Missing | AuthError::Invalid => StatusCode::UNAUTHORIZED,
+                    AuthError::Forbidden => StatusCode::FORBIDDEN,
+                })?;
             Ok(next.run(req).await)
         }
     }

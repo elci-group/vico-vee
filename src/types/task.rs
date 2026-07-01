@@ -56,4 +56,8 @@ pub struct ExecutionTask {
     pub budget: ExecutionBudget,
     pub hypothesis: Option<ExecutionHypothesis>,
     pub provenance: Provenance,
+    /// Project that owns this task. When `None` the daemon falls back to the
+    /// `default` project.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_id: Option<String>,
 }

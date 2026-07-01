@@ -1,0 +1,60 @@
+[package]
+name = "vico-vee"
+version = "0.1.0"
+description = "ViCo Execution Environment — standalone sandboxed execution service"
+authors = ["ViCo Systems"]
+license = "MIT"
+edition = "2021"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+tokio = { version = "1", features = ["full"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+tokio-util = { version = "0.7", features = ["rt"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
+axum = { version = "0.8", features = ["macros", "ws"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "limit"] }
+reqwest = { version = "0.12", features = ["json", "stream"] }
+async-trait = "0.1"
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+rusqlite = { version = "0.34", features = ["bundled", "chrono"] }
+blake3 = "1.5"
+lru = "0.16.3"
+ed25519-dalek = { version = "2.1", features = ["rand_core"] }
+jsonwebtoken = "9"
+libc = "0.2"
+dirs = "5"
+tempfile = "3"
+which = "7"
+anyhow = "1"
+thiserror = "1"
+futures = "0.3"
+futures-util = "0.3"
+base64 = "0.22"
+hex = "0.4"
+rand = "0.9"
+sha2 = "0.10"
+hmac = "0.12"
+regex = "1"
+chacha20poly1305 = "0.10"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3", features = ["sync-secret-service", "crypto-rust"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3", features = ["apple-native"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+keyring = { version = "3", features = ["windows-native"] }
+
+[dev-dependencies]
+tokio-test = "0.4"
+
+[[bin]]
+name = "vico-vee"
+path = "src/main.rs"

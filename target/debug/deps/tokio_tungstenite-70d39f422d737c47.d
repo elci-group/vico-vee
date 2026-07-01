@@ -1,0 +1,10 @@
+/home/sal/vico-desktop/src-tauri/vico-vee/target/debug/deps/tokio_tungstenite-70d39f422d737c47.d: /home/sal/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-tungstenite-0.29.0/src/lib.rs /home/sal/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-tungstenite-0.29.0/src/compat.rs /home/sal/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-tungstenite-0.29.0/src/connect.rs /home/sal/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-tungstenite-0.29.0/src/handshake.rs /home/sal/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-tungstenite-0.29.0/src/stream.rs /home/sal/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-tungstenite-0.29.0/src/tls.rs
+
+/home/sal/vico-desktop/src-tauri/vico-vee/target/debug/deps/libtokio_tungstenite-70d39f422d737c47.rmeta: /home/sal/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-tungstenite-0.29.0/src/lib.rs /home/sal/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-tungstenite-0.29.0/src/compat.rs /home/sal/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-tungstenite-0.29.0/src/connect.rs /home/sal/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-tungstenite-0.29.0/src/handshake.rs /home/sal/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-tungstenite-0.29.0/src/stream.rs /home/sal/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-tungstenite-0.29.0/src/tls.rs
+
+/home/sal/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-tungstenite-0.29.0/src/lib.rs:
+/home/sal/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-tungstenite-0.29.0/src/compat.rs:
+/home/sal/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-tungstenite-0.29.0/src/connect.rs:
+/home/sal/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-tungstenite-0.29.0/src/handshake.rs:
+/home/sal/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-tungstenite-0.29.0/src/stream.rs:
+/home/sal/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-tungstenite-0.29.0/src/tls.rs:

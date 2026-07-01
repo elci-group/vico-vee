@@ -1,0 +1,7 @@
+/home/sal/vico-desktop/src-tauri/vico-vee/target/debug/deps/num_conv-9ac97e63d233df49.d: /home/sal/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/num-conv-0.2.2/src/lib.rs
+
+/home/sal/vico-desktop/src-tauri/vico-vee/target/debug/deps/libnum_conv-9ac97e63d233df49.rlib: /home/sal/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/num-conv-0.2.2/src/lib.rs
+
+/home/sal/vico-desktop/src-tauri/vico-vee/target/debug/deps/libnum_conv-9ac97e63d233df49.rmeta: /home/sal/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/num-conv-0.2.2/src/lib.rs
+
+/home/sal/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/num-conv-0.2.2/src/lib.rs:

@@ -6,7 +6,6 @@
 //! workers are stored in the persistent ArtifactStore when possible.
 
 use crate::capability::{CapabilityRegistry, CapabilityVerifier};
-use crate::tenant::DEFAULT_PROJECT;
 use crate::types::*;
 use chrono::Utc;
 use serde_json::json;
@@ -109,10 +108,6 @@ impl ExecutorDaemon {
             return Err(format!("missing or invalid capability grant: {}", e));
         }
 
-        let project_id = task
-            .project_id
-            .clone()
-            .unwrap_or_else(|| DEFAULT_PROJECT.into());
         let result = ExecutionResult {
             execution_id: task.execution_id.clone(),
             status: ExecutionStatus::Queued,
@@ -128,7 +123,6 @@ impl ExecutorDaemon {
             created_at: Utc::now(),
             started_at: None,
             completed_at: None,
-            project_id,
         };
 
         self.inner
@@ -156,39 +150,14 @@ impl ExecutorDaemon {
         Ok("submitted".to_string())
     }
 
-    /// Return the current execution result for an execution id, if any. The
-    /// result is only returned if it belongs to `project_id`.
-    pub async fn get_status(
-        &self,
-        execution_id: &str,
-        project_id: Option<&str>,
-    ) -> Option<ExecutionResult> {
-        let project_id = project_id.unwrap_or(DEFAULT_PROJECT);
-        self.inner
-            .store
-            .read()
-            .await
-            .get(execution_id)
-            .filter(|r| r.project_id == project_id)
-            .cloned()
+    /// Return the current execution result for an execution id, if any.
+    pub async fn get_status(&self, execution_id: &str) -> Option<ExecutionResult> {
+        self.inner.store.read().await.get(execution_id).cloned()
     }
 
     /// Cancel an execution, aborting its worker if it is still in flight and
-    /// marking it as `Cancelled`. The execution must belong to `project_id`.
-    pub async fn cancel(&self, execution_id: &str, project_id: Option<&str>) -> Result<(), String> {
-        let project_id = project_id.unwrap_or(DEFAULT_PROJECT);
-        {
-            let store = self.inner.store.read().await;
-            if let Some(result) = store.get(execution_id) {
-                if result.project_id != project_id {
-                    return Err(format!(
-                        "execution '{}' does not belong to project '{}'",
-                        execution_id, project_id
-                    ));
-                }
-            }
-        }
-
+    /// marking it as `Cancelled`.
+    pub async fn cancel(&self, execution_id: &str) -> Result<(), String> {
         if let Some((token, handle)) = self.inner.inflight.lock().await.remove(execution_id) {
             token.cancel();
             handle.abort();
@@ -205,36 +174,22 @@ impl ExecutorDaemon {
         }
     }
 
-    /// List execution results, optionally filtered by status and project.
-    pub async fn list(
-        &self,
-        filter: Option<ExecutionStatus>,
-        project_id: Option<&str>,
-    ) -> Vec<ExecutionResult> {
-        let project_id = project_id.unwrap_or(DEFAULT_PROJECT);
+    /// List execution results, optionally filtered by status.
+    pub async fn list(&self, filter: Option<ExecutionStatus>) -> Vec<ExecutionResult> {
         self.inner
             .store
             .read()
             .await
             .values()
-            .filter(|r| r.project_id == project_id)
             .filter(|r| filter.as_ref().is_none_or(|f| r.status == *f))
             .cloned()
             .collect()
     }
 
-    /// Return artifact summaries for an execution within a project.
-    pub async fn get_artifacts(
-        &self,
-        execution_id: &str,
-        project_id: Option<&str>,
-    ) -> Vec<(String, ArtifactSummary)> {
-        let project_id = project_id.unwrap_or(DEFAULT_PROJECT);
+    /// Return artifact summaries for an execution.
+    pub async fn get_artifacts(&self, execution_id: &str) -> Vec<(String, ArtifactSummary)> {
         let store = self.inner.store.read().await;
-        let Some(result) = store
-            .get(execution_id)
-            .filter(|r| r.project_id == project_id)
-        else {
+        let Some(result) = store.get(execution_id) else {
             return vec![];
         };
         result
@@ -247,25 +202,20 @@ impl ExecutorDaemon {
             .collect()
     }
 
-    /// Return lightweight dashboard statistics for a project.
-    pub async fn dashboard_stats(&self, project_id: Option<&str>) -> serde_json::Value {
-        let project_id = project_id.unwrap_or(DEFAULT_PROJECT);
+    /// Return lightweight dashboard statistics.
+    pub async fn dashboard_stats(&self) -> serde_json::Value {
         let store = self.inner.store.read().await;
-        let project_results: Vec<_> = store
+        let total = store.len() as i64;
+        let completed = store
             .values()
-            .filter(|r| r.project_id == project_id)
-            .collect();
-        let total = project_results.len() as i64;
-        let completed = project_results
-            .iter()
             .filter(|r| r.status == ExecutionStatus::Completed)
             .count() as i64;
-        let failed = project_results
-            .iter()
+        let failed = store
+            .values()
             .filter(|r| r.status == ExecutionStatus::Failed)
             .count() as i64;
-        let pending = project_results
-            .iter()
+        let pending = store
+            .values()
             .filter(|r| {
                 matches!(
                     r.status,
@@ -274,11 +224,7 @@ impl ExecutorDaemon {
             })
             .count() as i64;
         let avg_latency_ms = if total > 0 {
-            project_results
-                .iter()
-                .map(|r| r.latency_ms as i64)
-                .sum::<i64>()
-                / total
+            store.values().map(|r| r.latency_ms as i64).sum::<i64>() / total
         } else {
             0
         };
@@ -295,17 +241,6 @@ impl ExecutorDaemon {
     /// Subscribe to executor events broadcast channel.
     pub fn subscribe_events(&self) -> broadcast::Receiver<serde_json::Value> {
         self.inner.event_tx.subscribe()
-    }
-
-    /// Return true if the daemon's background pump handle is present, meaning
-    /// the daemon has been started and not yet stopped.
-    pub async fn handle_set(&self) -> bool {
-        self.inner.handle.lock().await.is_some()
-    }
-
-    /// Return the number of currently in-flight executions.
-    pub async fn inflight_count(&self) -> usize {
-        self.inner.inflight.lock().await.len()
     }
 }
 

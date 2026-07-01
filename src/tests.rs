@@ -241,7 +241,6 @@ fn test_checkpoint_from_result() {
         created_at: chrono::Utc::now(),
         started_at: None,
         completed_at: None,
-        project_id: "default".into(),
     };
 
     let ckpt = checkpoint_from_result("exec-001", ExecutionPhase::Validation, &result);
@@ -494,12 +493,11 @@ async fn test_daemon_cancel_queued_execution() {
         },
         hypothesis: None,
         provenance: Provenance::default(),
-        project_id: None,
     };
     daemon.submit(task).await.unwrap();
 
-    daemon.cancel("cancel-queued-1", None).await.unwrap();
-    let status = daemon.get_status("cancel-queued-1", None).await.unwrap();
+    daemon.cancel("cancel-queued-1").await.unwrap();
+    let status = daemon.get_status("cancel-queued-1").await.unwrap();
     assert_eq!(status.status, ExecutionStatus::Cancelled);
     daemon.stop().await;
 }
@@ -524,7 +522,6 @@ async fn test_osmosis_diff_text_artifacts() {
         artifact_id: "art-left".into(),
         task_id: execution_id.into(),
         execution_id: execution_id.into(),
-        project_id: None,
         creator_agent: "test".into(),
         parent_artifacts: vec![],
         code_generator: "test".into(),
@@ -567,7 +564,6 @@ async fn test_osmosis_diff_text_artifacts() {
                 target_path: None,
                 format: Some(OsmosisDiffFormat::Structured),
             },
-            None,
         )
         .await
         .unwrap();
@@ -601,7 +597,6 @@ async fn test_osmosis_merge_and_reject() {
         artifact_id: "art-patch".into(),
         task_id: execution_id.into(),
         execution_id: execution_id.into(),
-        project_id: None,
         creator_agent: "test".into(),
         parent_artifacts: vec![],
         code_generator: "test".into(),
@@ -642,7 +637,6 @@ async fn test_osmosis_merge_and_reject() {
                 strategy: None,
                 base: None,
             },
-            None,
         )
         .await
         .unwrap();
@@ -668,7 +662,6 @@ async fn test_osmosis_merge_and_reject() {
                 }),
                 reason: Some("rolled back".into()),
             },
-            None,
         )
         .await
         .unwrap();
@@ -728,7 +721,6 @@ async fn test_daemon_rejects_capabilities_without_grants() {
         },
         hypothesis: None,
         provenance: Provenance::default(),
-        project_id: None,
     };
 
     let result = daemon.submit(task).await;
@@ -837,7 +829,6 @@ async fn test_worker_accepts_valid_grant_and_executes() {
         },
         hypothesis: None,
         provenance: Provenance::default(),
-        project_id: None,
     };
 
     worker
@@ -878,14 +869,13 @@ async fn test_daemon_submit_python_task_completes_with_stdout_artifact() {
         },
         hypothesis: None,
         provenance: Provenance::default(),
-        project_id: None,
     };
 
     daemon.submit(task).await.expect("submit should succeed");
 
     let mut final_result = None;
     for _ in 0..50 {
-        if let Some(r) = daemon.get_status(execution_id, None).await {
+        if let Some(r) = daemon.get_status(execution_id).await {
             if matches!(
                 r.status,
                 ExecutionStatus::Completed | ExecutionStatus::Failed | ExecutionStatus::Cancelled
@@ -951,18 +941,17 @@ async fn test_daemon_submit_then_cancel_marks_cancelled() {
         },
         hypothesis: None,
         provenance: Provenance::default(),
-        project_id: None,
     };
 
     daemon.submit(task).await.expect("submit should succeed");
     tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
     daemon
-        .cancel(execution_id, None)
+        .cancel(execution_id)
         .await
         .expect("cancel should succeed");
 
     let status = daemon
-        .get_status(execution_id, None)
+        .get_status(execution_id)
         .await
         .expect("result should exist");
     assert_eq!(status.status, ExecutionStatus::Cancelled);
@@ -987,7 +976,6 @@ async fn test_daemon_submit_without_grant_rejects() {
         budget: ExecutionBudget::default(),
         hypothesis: None,
         provenance: Provenance::default(),
-        project_id: None,
     };
 
     let result = daemon.submit(task).await;
@@ -998,102 +986,4 @@ async fn test_daemon_submit_without_grant_rejects() {
             .contains("missing or invalid capability grant"),
         "error should mention missing grant"
     );
-}
-
-#[tokio::test]
-async fn test_daemon_project_isolation_executions() {
-    let mut registry = crate::capability::CapabilityRegistry::new_with_seed([77u8; 32]);
-    let daemon = crate::ExecutorDaemon::try_new_with_verifier(registry.verifier())
-        .expect("daemon must construct");
-    daemon.start().await;
-
-    let grant_a = registry.grant(
-        "exec-a",
-        Capability::ProcessSpawn,
-        crate::types::GrantAuthority::Orchestrator,
-        None,
-    );
-    let task_a = ExecutionTask {
-        execution_id: "exec-a".into(),
-        run_id: None,
-        agent_id: "agent-a".into(),
-        language: ExecutionLanguage::Python,
-        source_code: "print('a')".into(),
-        capabilities: vec![Capability::ProcessSpawn],
-        capability_grants: vec![grant_a],
-        budget: ExecutionBudget {
-            cpu_seconds: 1,
-            memory_mb: 64,
-            disk_mb: 10,
-            token_budget: 10,
-            wall_clock_seconds: 2,
-        },
-        hypothesis: None,
-        provenance: Provenance::default(),
-        project_id: Some("project-a".into()),
-    };
-    daemon.submit(task_a).await.unwrap();
-
-    let grant_b = registry.grant(
-        "exec-b",
-        Capability::ProcessSpawn,
-        crate::types::GrantAuthority::Orchestrator,
-        None,
-    );
-    let task_b = ExecutionTask {
-        execution_id: "exec-b".into(),
-        run_id: None,
-        agent_id: "agent-b".into(),
-        language: ExecutionLanguage::Python,
-        source_code: "print('b')".into(),
-        capabilities: vec![Capability::ProcessSpawn],
-        capability_grants: vec![grant_b],
-        budget: ExecutionBudget {
-            cpu_seconds: 1,
-            memory_mb: 64,
-            disk_mb: 10,
-            token_budget: 10,
-            wall_clock_seconds: 2,
-        },
-        hypothesis: None,
-        provenance: Provenance::default(),
-        project_id: Some("project-b".into()),
-    };
-    daemon.submit(task_b).await.unwrap();
-
-    // Each project sees only its own execution.
-    assert!(daemon
-        .get_status("exec-a", Some("project-a"))
-        .await
-        .is_some());
-    assert!(daemon
-        .get_status("exec-a", Some("project-b"))
-        .await
-        .is_none());
-    assert!(daemon
-        .get_status("exec-b", Some("project-b"))
-        .await
-        .is_some());
-    assert!(daemon
-        .get_status("exec-b", Some("project-a"))
-        .await
-        .is_none());
-
-    let list_a = daemon.list(None, Some("project-a")).await;
-    assert_eq!(list_a.len(), 1);
-    assert_eq!(list_a[0].execution_id, "exec-a");
-
-    let list_b = daemon.list(None, Some("project-b")).await;
-    assert_eq!(list_b.len(), 1);
-    assert_eq!(list_b[0].execution_id, "exec-b");
-
-    // Cross-project dashboard is empty.
-    let stats_c = daemon.dashboard_stats(Some("project-c")).await;
-    assert_eq!(stats_c["total"], 0);
-
-    // Cancel is scoped by project.
-    assert!(daemon.cancel("exec-a", Some("project-b")).await.is_err());
-    assert!(daemon.cancel("exec-a", Some("project-a")).await.is_ok());
-
-    daemon.stop().await;
 }

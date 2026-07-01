@@ -19,10 +19,6 @@ pub struct Provenance {
     pub created_at: DateTime<Utc>,
     pub previous_hash: String,
     pub self_hash: String,
-    /// Project that owns this artifact. When `None` the artifact falls back to
-    /// the `default` project.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub project_id: Option<String>,
 }
 
 impl Default for Provenance {
@@ -39,7 +35,6 @@ impl Default for Provenance {
             created_at: Utc::now(),
             previous_hash: String::new(),
             self_hash: String::new(),
-            project_id: None,
         }
     }
 }

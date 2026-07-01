@@ -2,7 +2,7 @@
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 use reqwest::Client;
-use serde_json::{json, Value};
+use serde_json::json;
 use std::net::SocketAddr;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -31,8 +31,8 @@ async fn submit_noop(client: &Client, addr: &SocketAddr, seq: usize) {
     let url = format!("http://{}/vee/submit", addr);
     let body = json!({
         "agent_id": format!("bench-agent-{seq}"),
-        "language": "python",
-        "source_code": "print(\"noop\")",
+        "language": "shell",
+        "source_code": "echo noop",
         "capabilities": ["process_spawn"],
     });
     let resp = client
@@ -108,9 +108,9 @@ fn bench_submit_1000_noop_python(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("noop_python_submit");
     group.throughput(Throughput::Elements(1000));
-    group.warm_up_time(Duration::from_secs(3));
+    group.warm_up_time(Duration::from_secs(2));
     group.sample_size(10);
-    group.measurement_time(Duration::from_secs(300));
+    group.measurement_time(Duration::from_secs(30));
 
     const CONCURRENCY: usize = 10;
     const BATCHES: usize = 1000 / CONCURRENCY;

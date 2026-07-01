@@ -112,14 +112,27 @@ fn bench_submit_1000_noop_python(c: &mut Criterion) {
     group.sample_size(10);
     group.measurement_time(Duration::from_secs(300));
 
+    const CONCURRENCY: usize = 10;
+    const BATCHES: usize = 1000 / CONCURRENCY;
+
     group.bench_function("1000_tasks", |b| {
         b.iter(|| {
             let mut iteration_latencies = Vec::with_capacity(1000);
             rt.block_on(async {
-                for i in 0..1000 {
-                    let start = Instant::now();
-                    submit_noop(&client, &addr, i + 1).await;
-                    iteration_latencies.push(start.elapsed());
+                for batch in 0..BATCHES {
+                    let mut handles = Vec::with_capacity(CONCURRENCY);
+                    for offset in 0..CONCURRENCY {
+                        let seq = batch * CONCURRENCY + offset + 1;
+                        let client = client.clone();
+                        let start = Instant::now();
+                        handles.push(tokio::spawn(async move {
+                            submit_noop(&client, &addr, seq).await;
+                            start.elapsed()
+                        }));
+                    }
+                    for latency in futures::future::join_all(handles).await {
+                        iteration_latencies.push(latency.unwrap());
+                    }
                 }
             });
             LATENCIES.lock().unwrap().extend(iteration_latencies);
@@ -143,7 +156,7 @@ fn bench_submit_1000_noop_python(c: &mut Criterion) {
         let p99 = percentile(&all, 0.99);
         let throughput = if p50 > 0.0 { 1000.0 / p50 } else { 0.0 };
         eprintln!(
-            "\nvico-vee noop Python submit distribution (N={}): p50={:.3}ms, p99={:.3}ms, approx throughput={:.1} tasks/ms",
+            "\nvico-vee noop Python submit distribution (N={}): p50={:.3}ms, p99={:.3}ms, approx throughput={:.1} tasks/s",
             all.len(), p50, p99, throughput
         );
     }

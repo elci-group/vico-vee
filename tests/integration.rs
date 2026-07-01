@@ -76,7 +76,8 @@ async fn python_submit_status_list_artifacts_and_cancel() {
         .as_array()
         .unwrap()
         .iter()
-        .find_map(|v| v["Text"]["content"].as_str());
+        .find(|v| v["type"] == "Text")
+        .and_then(|v| v["data"]["content"].as_str());
     assert!(stdout
         .expect("stdout artifact missing")
         .contains("hello from python integration test"));

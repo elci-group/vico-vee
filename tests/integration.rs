@@ -192,6 +192,15 @@ async fn shell_submit_status_list_artifacts() {
         .collect();
     assert!(ids.contains(&exec_id));
 
+    let stdout = terminal["data"]["artifacts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find_map(|v| v["Text"]["content"].as_str());
+    assert!(stdout
+        .expect("stdout artifact missing")
+        .contains("hello from shell integration test"));
+
     let artifacts_url = format!("http://{}/vee/artifacts", server.addr);
     let artifacts: Value = client
         .post(&artifacts_url)
@@ -203,16 +212,12 @@ async fn shell_submit_status_list_artifacts() {
         .json()
         .await
         .unwrap();
-    let stdout = artifacts["artifacts"]
+    let has_text_summary = artifacts["artifacts"]
         .as_array()
         .unwrap()
         .iter()
-        .find_map(|v| v["artifact"]["Text"]["content"].as_str());
-    assert!(
-        stdout
-            .expect(&format!("stdout artifact missing: {}", artifacts["artifacts"]))
-            .contains("hello from shell integration test")
-    );
+        .any(|v| v["artifact"]["artifact_type"].as_str() == Some("text"));
+    assert!(has_text_summary, "expected a text artifact summary");
 
     server.stop().await;
 }

@@ -6,10 +6,10 @@ use common::*;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use reqwest::{Client, StatusCode};
-use std::io::Write;
+use std::io::Read;
 use std::time::Duration;
 use tar::Builder;
-use vico_vee::config::{Config, RateLimitConfig};
+use vico_vee::config::RateLimitConfig;
 
 #[tokio::test]
 async fn concurrent_cpu_and_sleep_tasks_reach_terminal() {
@@ -113,7 +113,7 @@ async fn graceful_shutdown_under_load_preserves_terminal_statuses() {
     tokio::time::sleep(Duration::from_millis(400)).await;
     shutdown.cancel();
 
-    let server_result = tokio::time::timeout(Duration::from_secs(15), handle).await;
+    let _server_result = tokio::time::timeout(Duration::from_secs(15), handle).await;
     submitter.await.unwrap();
 
     // Collect all ids that were successfully submitted.

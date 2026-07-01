@@ -42,9 +42,7 @@ async fn python_submit_status_list_artifacts_and_cancel() {
     let terminal = wait_terminal(&client, &server.addr, ADMIN_TOKEN, exec_id, None)
         .await
         .expect("python task should reach a terminal state");
-    eprintln!("TERMINAL STATUS JSON: {}", terminal["data"]["status"]);
-    assert_eq!(terminal["data"]["status"], "completed");
-    panic!("deliberate");
+    assert_eq!(terminal["data"]["status"], "Completed");
 
     // Status endpoint returns the same execution.
     let status = fetch_status(&client, &server.addr, ADMIN_TOKEN, exec_id, None)

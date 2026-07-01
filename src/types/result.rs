@@ -4,6 +4,10 @@ use serde::{Deserialize, Serialize};
 use super::artifact::Artifact;
 use super::schema::ValidationResult;
 
+fn default_project_id() -> String {
+    "default".into()
+}
+
 /// Result of executing a task.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExecutionResult {
@@ -21,6 +25,9 @@ pub struct ExecutionResult {
     pub created_at: DateTime<Utc>,
     pub started_at: Option<DateTime<Utc>>,
     pub completed_at: Option<DateTime<Utc>>,
+    /// Project that owns this execution result.
+    #[serde(default = "default_project_id")]
+    pub project_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

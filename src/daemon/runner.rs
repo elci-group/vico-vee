@@ -105,6 +105,7 @@ pub(crate) async fn run_execution(
             // Persist artifacts and keep them on the result.
             let mut provenance = task.provenance.clone();
             provenance.execution_id = execution_id.clone();
+            provenance.project_id = task.project_id.clone();
             let mut stored_artifacts = Vec::with_capacity(artifacts.len());
             for artifact in artifacts {
                 // Persistence is best-effort; the artifact is still part of the

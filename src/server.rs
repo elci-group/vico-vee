@@ -11,10 +11,17 @@ use axum::{
 };
 use serde::Deserialize;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::Mutex;
+use tower::ServiceBuilder;
+use tower::timeout::TimeoutLayer;
+use tower_http::limit::RequestBodyLimitLayer;
 
 use crate::{
+    auth::AuthKeys,
     capability::CapabilityRegistry,
+    health::{health, metrics, ready, set_request_id, MetricsRegistry},
+    limit::RateLimiter,
     openapi::{docs, openapi_json},
     types::{
         Capability, ExecutionLanguage, ExecutionTask, OsmosisArtifactRef, OsmosisDiffRequest,
@@ -32,6 +39,9 @@ pub struct AppState {
     pub vee: Arc<ExecutorDaemon>,
     pub capability_issuer: Arc<Mutex<CapabilityRegistry>>,
     pub config: Config,
+    pub metrics: MetricsRegistry,
+    pub auth_keys: Arc<AuthKeys>,
+    pub rate_limiter: Arc<RateLimiter>,
 }
 
 impl AppState {
@@ -46,6 +56,9 @@ impl AppState {
         crate::migrations::run_migrations(&conn, crate::migrations::MIGRATIONS)
             .map_err(|e| format!("run startup migrations: {e}"))?;
         drop(conn);
+
+        let auth_keys = Arc::new(AuthKeys::load(&config.api_keys).map_err(|e| format!("auth: {e}"))?);
+        let rate_limiter = Arc::new(RateLimiter::new(config.rate_limit.clone()));
 
         let key_dir = config.data_dir.join("keys");
         let revocation_dir = config.data_dir.join("revocations");
@@ -67,13 +80,61 @@ impl AppState {
             vee,
             capability_issuer,
             config,
+            metrics: MetricsRegistry::default(),
+            auth_keys,
+            rate_limiter,
         })
+    }
+
+    /// Test-only constructor that avoids keyring/network dependencies.
+    #[cfg(test)]
+    pub fn test_new(config: Config) -> Self {
+        use crate::auth::{ApiKey, ApiKeysFile};
+        use std::collections::HashMap;
+
+        let mut keys = HashMap::new();
+        keys.insert(
+            "admin".to_string(),
+            ApiKey {
+                token: "test-admin-token".to_string(),
+                scopes: vec!["submit".to_string(), "read".to_string(), "admin".to_string()],
+            },
+        );
+        keys.insert(
+            "submit".to_string(),
+            ApiKey {
+                token: "test-submit-token".to_string(),
+                scopes: vec!["submit".to_string()],
+            },
+        );
+        keys.insert(
+            "read".to_string(),
+            ApiKey {
+                token: "test-read-token".to_string(),
+                scopes: vec!["read".to_string()],
+            },
+        );
+        let auth_keys = Arc::new(AuthKeys::from_map(keys, true));
+        let rate_limiter = Arc::new(RateLimiter::new(config.rate_limit.clone()));
+        let capability_issuer = Arc::new(Mutex::new(CapabilityRegistry::new_with_seed([0u8; 32])));
+        let vee = Arc::new(ExecutorDaemon::new());
+
+        Self {
+            vee,
+            capability_issuer,
+            config,
+            metrics: MetricsRegistry::default(),
+            auth_keys,
+            rate_limiter,
+        }
     }
 }
 
 /// All HTTP routes registered by the vico-vee router, used by OpenAPI tests.
 pub const ROUTES: &[&str] = &[
     "/health",
+    "/ready",
+    "/metrics",
     "/openapi.json",
     "/docs",
     "/vee/submit",
@@ -93,8 +154,17 @@ pub const ROUTES: &[&str] = &[
 ];
 
 pub fn router(state: AppState) -> Router {
+    let body_limit = state
+        .config
+        .body_limit_mb
+        .saturating_mul(1024)
+        .saturating_mul(1024);
+    let timeout = Duration::from_secs(state.config.request_timeout_secs);
+
     Router::new()
-        .route("/health", post(health))
+        .route("/health", get(health))
+        .route("/ready", get(ready))
+        .route("/metrics", get(metrics))
         .route("/openapi.json", get(openapi_json))
         .route("/docs", get(docs))
         .route("/vee/submit", post(vee_submit))
@@ -111,11 +181,25 @@ pub fn router(state: AppState) -> Router {
         .route("/vee/diff", post(vee_diff))
         .route("/vee/merge", post(vee_merge))
         .route("/vee/reject", post(vee_reject))
+        .layer(
+            ServiceBuilder::new()
+                .layer(TimeoutLayer::new(timeout))
+                .layer(axum::middleware::from_fn_with_state(
+                    state.clone(),
+                    crate::limit::agent_rate_limit_middleware,
+                ))
+                .layer(axum::middleware::from_fn_with_state(
+                    state.clone(),
+                    crate::auth::auth_middleware,
+                ))
+                .layer(axum::middleware::from_fn(set_request_id))
+                .layer(axum::middleware::from_fn_with_state(
+                    state.clone(),
+                    crate::limit::ip_rate_limit_middleware,
+                ))
+                .layer(RequestBodyLimitLayer::new(body_limit)),
+        )
         .with_state(state)
-}
-
-async fn health() -> JsonResponse<serde_json::Value> {
-    JsonResponse(serde_json::json!({"status": "ok", "service": "vico-vee"}))
 }
 
 #[derive(Debug, Deserialize)]

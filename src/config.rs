@@ -48,9 +48,9 @@ pub struct Config {
     /// Optional path to a TLS private key (PEM).
     pub tls_key: Option<PathBuf>,
 
-    /// Path to the API-keys file.
-    #[serde(default = "default_api_keys_file")]
-    pub api_keys_file: PathBuf,
+    /// API-key authentication configuration.
+    #[serde(default)]
+    pub api_keys: ApiKeysConfig,
 
     /// Maximum request body size in megabytes.
     #[serde(default = "default_body_limit_mb")]
@@ -60,13 +60,14 @@ pub struct Config {
     #[serde(default = "default_request_timeout_secs")]
     pub request_timeout_secs: u64,
 
-    /// Rate limit: requests per second per IP.
-    #[serde(default = "default_rate_limit_per_sec")]
-    pub rate_limit_per_sec: u32,
+    /// Rate limiting configuration.
+    #[serde(default)]
+    pub rate_limit: RateLimitConfig,
 
-    /// Rate limit: maximum burst per IP.
-    #[serde(default = "default_rate_limit_burst")]
-    pub rate_limit_burst: u32,
+    /// Seconds to wait for in-flight executions to finish before forcing
+    /// cancellation during graceful shutdown.
+    #[serde(default = "default_shutdown_grace_period_secs")]
+    pub shutdown_grace_period_secs: u64,
 }
 
 /// Log output format.
@@ -77,6 +78,65 @@ pub enum LogFormat {
     Pretty,
     Json,
     Compact,
+}
+
+/// API-key authentication settings.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiKeysConfig {
+    /// Path to the API-keys file.
+    #[serde(default = "default_api_keys_file")]
+    pub file: PathBuf,
+
+    /// When `true` and keys are configured, reject requests without a valid
+    /// key. Defaults to `true`.
+    #[serde(default = "default_api_keys_require_auth")]
+    pub require_auth: bool,
+
+    /// Optional TOML-formatted API keys that override the keys file. Useful
+    /// for container secrets: `VICO_VEE_API_KEYS`.
+    #[serde(default)]
+    pub env_override: Option<String>,
+}
+
+impl Default for ApiKeysConfig {
+    fn default() -> Self {
+        Self {
+            file: default_api_keys_file(),
+            require_auth: default_api_keys_require_auth(),
+            env_override: None,
+        }
+    }
+}
+
+/// Rate-limiting settings.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RateLimitConfig {
+    /// Requests per second allowed from a single IP.
+    #[serde(default = "default_rate_limit_per_sec")]
+    pub per_sec: u32,
+
+    /// Maximum burst of requests allowed from a single IP.
+    #[serde(default = "default_rate_limit_burst")]
+    pub burst: u32,
+
+    /// Executions per second allowed for a single `agent_id`.
+    #[serde(default = "default_exec_rate_per_sec")]
+    pub exec_per_sec: u32,
+
+    /// Maximum execution burst allowed for a single `agent_id`.
+    #[serde(default = "default_exec_rate_burst")]
+    pub exec_burst: u32,
+}
+
+impl Default for RateLimitConfig {
+    fn default() -> Self {
+        Self {
+            per_sec: default_rate_limit_per_sec(),
+            burst: default_rate_limit_burst(),
+            exec_per_sec: default_exec_rate_per_sec(),
+            exec_burst: default_exec_rate_burst(),
+        }
+    }
 }
 
 fn default_port() -> u16 {
@@ -103,6 +163,10 @@ fn default_api_keys_file() -> PathBuf {
     crate::paths::vee_config_dir().join("api_keys.toml")
 }
 
+fn default_api_keys_require_auth() -> bool {
+    true
+}
+
 fn default_body_limit_mb() -> usize {
     16
 }
@@ -119,6 +183,18 @@ fn default_rate_limit_burst() -> u32 {
     50
 }
 
+fn default_exec_rate_per_sec() -> u32 {
+    10
+}
+
+fn default_exec_rate_burst() -> u32 {
+    30
+}
+
+fn default_shutdown_grace_period_secs() -> u64 {
+    30
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -130,11 +206,11 @@ impl Default for Config {
             log_format: LogFormat::default(),
             tls_cert: None,
             tls_key: None,
-            api_keys_file: default_api_keys_file(),
+            api_keys: ApiKeysConfig::default(),
             body_limit_mb: default_body_limit_mb(),
             request_timeout_secs: default_request_timeout_secs(),
-            rate_limit_per_sec: default_rate_limit_per_sec(),
-            rate_limit_burst: default_rate_limit_burst(),
+            rate_limit: RateLimitConfig::default(),
+            shutdown_grace_period_secs: default_shutdown_grace_period_secs(),
         }
     }
 }
@@ -179,6 +255,10 @@ pub struct Cli {
     #[arg(long, env = "VICO_VEE_API_KEYS_FILE")]
     pub api_keys_file: Option<PathBuf>,
 
+    /// Require API-key authentication even if keys are configured.
+    #[arg(long, env = "VICO_VEE_API_KEYS_REQUIRE_AUTH")]
+    pub api_keys_require_auth: Option<bool>,
+
     /// Maximum request body size in megabytes.
     #[arg(long, env = "VICO_VEE_BODY_LIMIT_MB")]
     pub body_limit_mb: Option<usize>,
@@ -194,6 +274,18 @@ pub struct Cli {
     /// Rate limit: maximum burst per IP.
     #[arg(long, env = "VICO_VEE_RATE_LIMIT_BURST")]
     pub rate_limit_burst: Option<u32>,
+
+    /// Execution rate limit: submissions per second per agent_id.
+    #[arg(long, env = "VICO_VEE_EXEC_RATE_LIMIT_PER_SEC")]
+    pub exec_rate_limit_per_sec: Option<u32>,
+
+    /// Execution rate limit: maximum burst per agent_id.
+    #[arg(long, env = "VICO_VEE_EXEC_RATE_LIMIT_BURST")]
+    pub exec_rate_limit_burst: Option<u32>,
+
+    /// Seconds to wait for in-flight executions during graceful shutdown.
+    #[arg(long, env = "VICO_VEE_SHUTDOWN_GRACE_PERIOD_SECS")]
+    pub shutdown_grace_period_secs: Option<u64>,
 }
 
 impl Config {
@@ -277,7 +369,15 @@ impl Config {
             self.tls_key = Some(PathBuf::from(v));
         }
         if let Ok(v) = std::env::var("VICO_VEE_API_KEYS_FILE") {
-            self.api_keys_file = PathBuf::from(v);
+            self.api_keys.file = PathBuf::from(v);
+        }
+        if let Ok(v) = std::env::var("VICO_VEE_API_KEYS_REQUIRE_AUTH") {
+            self.api_keys.require_auth = v
+                .parse()
+                .map_err(|e| format!("VICO_VEE_API_KEYS_REQUIRE_AUTH: {e}"))?;
+        }
+        if let Ok(v) = std::env::var("VICO_VEE_API_KEYS") {
+            self.api_keys.env_override = Some(v);
         }
         if let Ok(v) = std::env::var("VICO_VEE_BODY_LIMIT_MB") {
             self.body_limit_mb = v
@@ -290,14 +390,29 @@ impl Config {
                 .map_err(|e| format!("VICO_VEE_REQUEST_TIMEOUT_SECS: {e}"))?;
         }
         if let Ok(v) = std::env::var("VICO_VEE_RATE_LIMIT_PER_SEC") {
-            self.rate_limit_per_sec = v
+            self.rate_limit.per_sec = v
                 .parse()
                 .map_err(|e| format!("VICO_VEE_RATE_LIMIT_PER_SEC: {e}"))?;
         }
         if let Ok(v) = std::env::var("VICO_VEE_RATE_LIMIT_BURST") {
-            self.rate_limit_burst = v
+            self.rate_limit.burst = v
                 .parse()
                 .map_err(|e| format!("VICO_VEE_RATE_LIMIT_BURST: {e}"))?;
+        }
+        if let Ok(v) = std::env::var("VICO_VEE_EXEC_RATE_LIMIT_PER_SEC") {
+            self.rate_limit.exec_per_sec = v
+                .parse()
+                .map_err(|e| format!("VICO_VEE_EXEC_RATE_LIMIT_PER_SEC: {e}"))?;
+        }
+        if let Ok(v) = std::env::var("VICO_VEE_EXEC_RATE_LIMIT_BURST") {
+            self.rate_limit.exec_burst = v
+                .parse()
+                .map_err(|e| format!("VICO_VEE_EXEC_RATE_LIMIT_BURST: {e}"))?;
+        }
+        if let Ok(v) = std::env::var("VICO_VEE_SHUTDOWN_GRACE_PERIOD_SECS") {
+            self.shutdown_grace_period_secs = v
+                .parse()
+                .map_err(|e| format!("VICO_VEE_SHUTDOWN_GRACE_PERIOD_SECS: {e}"))?;
         }
         Ok(())
     }
@@ -331,7 +446,10 @@ impl Config {
             self.tls_key = cli.tls_key;
         }
         if let Some(v) = cli.api_keys_file {
-            self.api_keys_file = v;
+            self.api_keys.file = v;
+        }
+        if let Some(v) = cli.api_keys_require_auth {
+            self.api_keys.require_auth = v;
         }
         if let Some(v) = cli.body_limit_mb {
             self.body_limit_mb = v;
@@ -340,10 +458,19 @@ impl Config {
             self.request_timeout_secs = v;
         }
         if let Some(v) = cli.rate_limit_per_sec {
-            self.rate_limit_per_sec = v;
+            self.rate_limit.per_sec = v;
         }
         if let Some(v) = cli.rate_limit_burst {
-            self.rate_limit_burst = v;
+            self.rate_limit.burst = v;
+        }
+        if let Some(v) = cli.exec_rate_limit_per_sec {
+            self.rate_limit.exec_per_sec = v;
+        }
+        if let Some(v) = cli.exec_rate_limit_burst {
+            self.rate_limit.exec_burst = v;
+        }
+        if let Some(v) = cli.shutdown_grace_period_secs {
+            self.shutdown_grace_period_secs = v;
         }
     }
 }
@@ -369,8 +496,12 @@ mod tests {
         assert_eq!(cfg.bind, "0.0.0.0");
         assert_eq!(cfg.body_limit_mb, 16);
         assert_eq!(cfg.request_timeout_secs, 30);
-        assert_eq!(cfg.rate_limit_per_sec, 10);
-        assert_eq!(cfg.rate_limit_burst, 50);
+        assert_eq!(cfg.rate_limit.per_sec, 10);
+        assert_eq!(cfg.rate_limit.burst, 50);
+        assert_eq!(cfg.rate_limit.exec_per_sec, 10);
+        assert_eq!(cfg.rate_limit.exec_burst, 30);
+        assert_eq!(cfg.shutdown_grace_period_secs, 30);
+        assert!(cfg.api_keys.require_auth);
     }
 
     #[test]
@@ -407,6 +538,29 @@ mod tests {
         assert_eq!(cfg.body_limit_mb, 8);
         // Defaults preserved for unspecified fields.
         assert_eq!(cfg.request_timeout_secs, 30);
+    }
+
+    #[test]
+    fn config_nested_rate_limit_from_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut f = std::fs::File::create(tmp.path().join("config.toml")).unwrap();
+        writeln!(f, "[rate_limit]").unwrap();
+        writeln!(f, "per_sec = 5").unwrap();
+        writeln!(f, "burst = 20").unwrap();
+        writeln!(f, "exec_per_sec = 2").unwrap();
+        writeln!(f, "exec_burst = 10").unwrap();
+        drop(f);
+
+        let cli = Cli {
+            config_dir: Some(tmp.path().to_path_buf()),
+            ..Default::default()
+        };
+
+        let cfg = Config::load(Some(cli)).unwrap();
+        assert_eq!(cfg.rate_limit.per_sec, 5);
+        assert_eq!(cfg.rate_limit.burst, 20);
+        assert_eq!(cfg.rate_limit.exec_per_sec, 2);
+        assert_eq!(cfg.rate_limit.exec_burst, 10);
     }
 
     #[test]

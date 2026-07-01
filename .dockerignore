@@ -1,0 +1,33 @@
+# Build artifacts
+target/
+Cargo.lock.bak
+
+# Local development data and configuration
+data/
+config/
+*.db
+*.db-journal
+
+# Version control
+.git/
+.gitignore
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Documentation that does not need to be in the image
+README.md
+BENCHMARKS.md
+CHANGELOG.md
+
+# Test and CI artifacts
+*.log
+coverage/

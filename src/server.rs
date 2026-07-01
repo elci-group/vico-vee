@@ -38,6 +38,15 @@ impl AppState {
     pub async fn try_new(config: Config) -> Result<Self, String> {
         std::fs::create_dir_all(&config.data_dir).map_err(|e| format!("create data dir: {}", e))?;
 
+        // Run schema migrations on the main metadata database before starting
+        // the executor daemon so that all stores see a versioned schema.
+        let db_path = config.data_dir.join("vee_artifacts.db");
+        let conn = rusqlite::Connection::open(&db_path)
+            .map_err(|e| format!("open main metadata db: {e}"))?;
+        crate::migrations::run_migrations(&conn, crate::migrations::MIGRATIONS)
+            .map_err(|e| format!("run startup migrations: {e}"))?;
+        drop(conn);
+
         let key_dir = config.data_dir.join("keys");
         let revocation_dir = config.data_dir.join("revocations");
         let capability_issuer = Arc::new(Mutex::new(
@@ -61,6 +70,27 @@ impl AppState {
         })
     }
 }
+
+/// All HTTP routes registered by the vico-vee router, used by OpenAPI tests.
+pub const ROUTES: &[&str] = &[
+    "/health",
+    "/openapi.json",
+    "/docs",
+    "/vee/submit",
+    "/vee/status",
+    "/vee/cancel",
+    "/vee/list",
+    "/vee/artifacts",
+    "/vee/dashboard",
+    "/vee/patterns",
+    "/vee/audit",
+    "/vee/checkpoints",
+    "/vee/odin/health",
+    "/vee/odin/model",
+    "/vee/diff",
+    "/vee/merge",
+    "/vee/reject",
+];
 
 pub fn router(state: AppState) -> Router {
     Router::new()

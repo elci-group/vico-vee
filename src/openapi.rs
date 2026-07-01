@@ -93,4 +93,24 @@ mod tests {
     fn docs_html_references_spec() {
         assert!(DOCS_HTML.contains("/openapi.json"));
     }
+
+    #[test]
+    fn openapi_spec_covers_all_registered_routes() {
+        let spec = spec_value().unwrap();
+        let paths = spec
+            .get("paths")
+            .and_then(|p| p.as_object())
+            .expect("OpenAPI spec missing 'paths' object");
+
+        for route in crate::server::ROUTES {
+            let entry = paths
+                .get(*route)
+                .unwrap_or_else(|| panic!("OpenAPI spec missing route {route}"));
+            let methods = entry.as_object().expect("path item object");
+            assert!(
+                methods.contains_key("get") || methods.contains_key("post"),
+                "OpenAPI spec missing GET or POST operation for route {route}"
+            );
+        }
+    }
 }

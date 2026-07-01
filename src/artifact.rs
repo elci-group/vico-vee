@@ -49,8 +49,7 @@ impl ArtifactStore {
         std::fs::create_dir_all(blob_dir)
             .map_err(|e| format!("create artifact blob dir: {}", e))?;
         let conn = Connection::open(db_path).map_err(|e| format!("open artifact db: {}", e))?;
-        crate::migrations::Runner::new()
-            .run(&conn)
+        crate::migrations::run_migrations(&conn, crate::migrations::MIGRATIONS)
             .map_err(|e| format!("run artifact schema migrations: {}", e))?;
         Ok(Self {
             db: Arc::new(tokio::sync::Mutex::new(conn)),

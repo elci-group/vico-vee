@@ -34,7 +34,9 @@ pub const MIGRATIONS: &[Migration] = &[
         version: 2,
         name: "add_artifact_blob_hash",
         sql: include_str!("../migrations/002_add_artifact_blob_hash.sql"),
-        down_sql: Some(include_str!("../migrations/002_add_artifact_blob_hash.down.sql")),
+        down_sql: Some(include_str!(
+            "../migrations/002_add_artifact_blob_hash.down.sql"
+        )),
     },
 ];
 
@@ -76,8 +78,8 @@ pub fn run_migrations_to(
             .iter()
             .filter(|m| m.version > current_version && m.version <= target)
         {
-            match conn.execute(migration.sql, []) {
-                Ok(_) => {}
+            match conn.execute_batch(migration.sql) {
+                Ok(()) => {}
                 Err(e) => {
                     let msg = e.to_string().to_lowercase();
                     // Allow idempotent re-runs for operations that are already applied.
@@ -110,11 +112,12 @@ pub fn run_migrations_to(
             .rev()
         {
             if let Some(down) = migration.down_sql {
-                conn.execute(down, [])
-                    .map_err(|e| format!(
+                conn.execute_batch(down).map_err(|e| {
+                    format!(
                         "revert migration {} '{}': {e}",
                         migration.version, migration.name
-                    ))?;
+                    )
+                })?;
             }
             conn.execute(
                 "DELETE FROM vee_migrations WHERE version = ?1",
@@ -139,6 +142,32 @@ pub fn current_version(conn: &Connection) -> Result<i64, String> {
     Ok(version)
 }
 
+/// Convenience builder used by stores that opens a connection and runs the
+/// embedded migration set.
+#[derive(Debug, Default, Clone)]
+pub struct Runner {
+    migrations: &'static [Migration],
+}
+
+impl Runner {
+    /// Create a runner pre-loaded with the embedded `MIGRATIONS` set.
+    pub fn new() -> Self {
+        Self {
+            migrations: MIGRATIONS,
+        }
+    }
+
+    /// Run all pending migrations on the provided connection.
+    pub fn run(&self, conn: &Connection) -> Result<(), String> {
+        run_migrations(conn, self.migrations)
+    }
+
+    /// Migrate the connection to a specific target version.
+    pub fn run_to(&self, conn: &Connection, target: i64) -> Result<(), String> {
+        run_migrations_to(conn, self.migrations, target)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -161,11 +190,9 @@ mod tests {
         run_migrations(&conn, MIGRATIONS).unwrap();
 
         let version: i64 = conn
-            .query_row(
-                "SELECT MAX(version) FROM vee_migrations",
-                [],
-                |row| row.get(0),
-            )
+            .query_row("SELECT MAX(version) FROM vee_migrations", [], |row| {
+                row.get(0)
+            })
             .unwrap();
         assert_eq!(version, MIGRATIONS.last().unwrap().version);
     }
@@ -215,7 +242,10 @@ mod tests {
     fn migration_runner_down_reverts_to_target() {
         let conn = Connection::open_in_memory().unwrap();
         run_migrations(&conn, MIGRATIONS).unwrap();
-        assert_eq!(current_version(&conn).unwrap(), MIGRATIONS.last().unwrap().version);
+        assert_eq!(
+            current_version(&conn).unwrap(),
+            MIGRATIONS.last().unwrap().version
+        );
 
         run_migrations_to(&conn, MIGRATIONS, 0).unwrap();
         assert_eq!(current_version(&conn).unwrap(), 0);
@@ -228,7 +258,10 @@ mod tests {
         run_migrations_to(&conn, MIGRATIONS, 0).unwrap();
         run_migrations(&conn, MIGRATIONS).unwrap();
 
-        assert_eq!(current_version(&conn).unwrap(), MIGRATIONS.last().unwrap().version);
+        assert_eq!(
+            current_version(&conn).unwrap(),
+            MIGRATIONS.last().unwrap().version
+        );
     }
 
     #[test]

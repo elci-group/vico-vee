@@ -33,8 +33,7 @@ impl PatternStore {
         }
 
         let db = rusqlite::Connection::open(path).map_err(|e| e.to_string())?;
-        crate::migrations::Runner::new()
-            .run(&db)
+        crate::migrations::run_migrations(&db, crate::migrations::MIGRATIONS)
             .map_err(|e| format!("run pattern schema migrations: {e}"))?;
 
         {

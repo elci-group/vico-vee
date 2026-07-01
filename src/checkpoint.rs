@@ -36,8 +36,7 @@ pub struct CheckpointStore {
 impl CheckpointStore {
     pub fn new(db_path: &PathBuf) -> Result<Self, String> {
         let conn = Connection::open(db_path).map_err(|e| format!("open checkpoint db: {}", e))?;
-        crate::migrations::Runner::new()
-            .run(&conn)
+        crate::migrations::run_migrations(&conn, crate::migrations::MIGRATIONS)
             .map_err(|e| format!("run checkpoint schema migrations: {}", e))?;
 
         Ok(Self { conn })

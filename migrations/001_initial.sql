@@ -9,7 +9,6 @@ CREATE TABLE IF NOT EXISTS vee_artifacts (
     kind TEXT NOT NULL,
     metadata_json TEXT NOT NULL,
     blob_path TEXT NOT NULL,
-    blob_hash TEXT,
     provenance_json TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );

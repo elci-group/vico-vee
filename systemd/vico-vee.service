@@ -1,0 +1,31 @@
+[Unit]
+Description=ViCo Execution Environment service
+Documentation=https://github.com/vico-systems/vico-vee
+After=network.target
+
+[Service]
+Type=simple
+User=vico-vee
+Group=vico-vee
+ExecStart=/usr/local/bin/vico-vee --config-dir /etc/vico-vee --data-dir /var/lib/vico-vee
+Restart=on-failure
+RestartSec=5
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/vico-vee /etc/vico-vee
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+[Install]
+WantedBy=multi-user.target

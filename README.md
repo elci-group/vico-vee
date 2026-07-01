@@ -74,10 +74,10 @@ vico-vee service
 - [x] `vico-desktop` HTTP client (`vee_client`)
 - [x] `/vee/*` routes in `vico-desktop` forwarded to `vico-vee`
 - [x] CED pipeline uses `vee_client`
-- [ ] Background daemon migrated to `vee_client`
-- [ ] Antigravity adapter migrated to `vee_client`
-- [ ] Eval harness migrated to `vee_client`
-- [ ] Remove embedded `ExecutorDaemon` from `vico-desktop` once all consumers migrate
+- [x] Background daemon migrated to `vee_client`
+- [x] Antigravity adapter migrated to `vee_client`
+- [x] Eval harness migrated to `vee_client`
+- [ ] Remove embedded `ExecutorDaemon` from `vico-desktop` once audit/checkpoint/ODIN endpoints migrate
 
 ## License
 

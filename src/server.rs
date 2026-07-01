@@ -81,8 +81,6 @@ pub fn router(state: AppState) -> Router {
         .route("/vee/diff", post(vee_diff))
         .route("/vee/merge", post(vee_merge))
         .route("/vee/reject", post(vee_reject))
-        .route("/openapi.json", get(crate::openapi::openapi_json))
-        .route("/docs", get(crate::openapi::docs))
         .with_state(state)
 }
 

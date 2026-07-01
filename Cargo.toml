@@ -29,7 +29,9 @@ http-body-util = "0.1"
 async-trait = "0.1"
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
-rusqlite = { version = "0.34", features = ["bundled", "chrono"] }
+rusqlite = { version = "0.34", features = ["bundled", "chrono", "backup"] }
+tar = "0.4"
+flate2 = "1"
 clap = { version = "4", features = ["derive", "env"] }
 blake3 = "1.5"
 lru = "0.16.3"

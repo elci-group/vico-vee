@@ -109,7 +109,10 @@ impl ExecutorDaemon {
             return Err(format!("missing or invalid capability grant: {}", e));
         }
 
-        let project_id = task.project_id.clone().unwrap_or_else(|| DEFAULT_PROJECT.into());
+        let project_id = task
+            .project_id
+            .clone()
+            .unwrap_or_else(|| DEFAULT_PROJECT.into());
         let result = ExecutionResult {
             execution_id: task.execution_id.clone(),
             status: ExecutionStatus::Queued,
@@ -172,11 +175,7 @@ impl ExecutorDaemon {
 
     /// Cancel an execution, aborting its worker if it is still in flight and
     /// marking it as `Cancelled`. The execution must belong to `project_id`.
-    pub async fn cancel(
-        &self,
-        execution_id: &str,
-        project_id: Option<&str>,
-    ) -> Result<(), String> {
+    pub async fn cancel(&self, execution_id: &str, project_id: Option<&str>) -> Result<(), String> {
         let project_id = project_id.unwrap_or(DEFAULT_PROJECT);
         {
             let store = self.inner.store.read().await;
@@ -232,7 +231,10 @@ impl ExecutorDaemon {
     ) -> Vec<(String, ArtifactSummary)> {
         let project_id = project_id.unwrap_or(DEFAULT_PROJECT);
         let store = self.inner.store.read().await;
-        let Some(result) = store.get(execution_id).filter(|r| r.project_id == project_id) else {
+        let Some(result) = store
+            .get(execution_id)
+            .filter(|r| r.project_id == project_id)
+        else {
             return vec![];
         };
         result
@@ -272,7 +274,11 @@ impl ExecutorDaemon {
             })
             .count() as i64;
         let avg_latency_ms = if total > 0 {
-            project_results.iter().map(|r| r.latency_ms as i64).sum::<i64>() / total
+            project_results
+                .iter()
+                .map(|r| r.latency_ms as i64)
+                .sum::<i64>()
+                / total
         } else {
             0
         };

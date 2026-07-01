@@ -7,11 +7,26 @@ use clap::Parser;
 use std::time::Duration;
 use tokio::signal;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-use vico_vee::config::{Cli, Config, LogFormat};
+use vico_vee::config::{Cli, Command, Config, LogFormat};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
+    match &cli.command {
+        Some(Command::Backup { output }) => {
+            let config = Config::load(Some(cli.clone()))?;
+            let path = vico_vee::backup::run_backup(&config, output.clone())?;
+            println!("Backup created: {}", path.display());
+            return Ok(());
+        }
+        Some(Command::Restore { input }) => {
+            let config = Config::load(Some(cli.clone()))?;
+            vico_vee::backup::run_restore(&config, input.clone())?;
+            println!("Restore completed.");
+            return Ok(());
+        }
+        _ => {}
+    }
     let config = Config::load(Some(cli))?;
 
     let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
@@ -57,7 +72,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let key_path = config.tls_key.as_ref().unwrap();
         let tls_config = vico_vee::tls::TlsConfig::new(cert_path, key_path);
         let tls_reloader = vico_vee::tls::TlsReloader::new(&tls_config)?;
-        tls_reloader.spawn_sighup_reloader();
+        tls_reloader.clone().spawn_sighup_reloader();
 
         tracing::info!(
             bind = %config.bind,
@@ -69,14 +84,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         vico_vee::tls::serve_https(
             listener,
             app,
-            tls_reloader.acceptor(),
+            tls_reloader,
             shutdown_token.cancelled_owned(),
         )
         .await?;
     } else {
         tracing::warn!(
-            "TLS is not configured; vico-vee will serve plain HTTP. "
-            "Set --tls-cert and --tls-key to enable HTTPS."
+            "TLS is not configured; vico-vee will serve plain HTTP. Set --tls-cert and --tls-key to enable HTTPS."
         );
 
         tracing::info!(

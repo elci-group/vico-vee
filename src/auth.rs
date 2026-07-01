@@ -36,6 +36,7 @@ pub struct AuthKeys {
 
 #[derive(Debug, Clone)]
 struct ApiKeyEntry {
+    #[allow(dead_code)]
     name: String,
     scopes: HashSet<String>,
 }
@@ -164,13 +165,10 @@ pub async fn auth_middleware(
             }
         }
         Some(value) => {
-            state
-                .auth_keys
-                .check(value, scope)
-                .map_err(|e| match e {
-                    AuthError::Missing | AuthError::Invalid => StatusCode::UNAUTHORIZED,
-                    AuthError::Forbidden => StatusCode::FORBIDDEN,
-                })?;
+            state.auth_keys.check(value, scope).map_err(|e| match e {
+                AuthError::Missing | AuthError::Invalid => StatusCode::UNAUTHORIZED,
+                AuthError::Forbidden => StatusCode::FORBIDDEN,
+            })?;
             Ok(next.run(req).await)
         }
     }

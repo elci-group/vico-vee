@@ -18,7 +18,7 @@ const ARTIFACT_CACHE_SIZE: usize = 128;
 pub struct ArtifactStore {
     db: Arc<tokio::sync::Mutex<Connection>>,
     blob_dir: PathBuf,
-    cache: Arc<tokio::sync::Mutex<LruCache<String, Artifact>>>,
+    cache: Arc<tokio::sync::Mutex<LruCache<(String, String), Artifact>>>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -135,7 +135,10 @@ impl ArtifactStore {
         .await
         .map_err(|e| format!("artifact store task failed: {}", e))??;
 
-        cache.lock().await.put(id.clone(), artifact_for_cache);
+        cache
+            .lock()
+            .await
+            .put((project_id.clone(), id.clone()), artifact_for_cache);
         Ok(id)
     }
 
@@ -143,7 +146,7 @@ impl ArtifactStore {
     pub async fn get(&self, artifact_id: &str, project_id: &str) -> Option<Artifact> {
         {
             let mut cache = self.cache.lock().await;
-            if let Some(artifact) = cache.get(artifact_id) {
+            if let Some(artifact) = cache.get(&(project_id.to_string(), artifact_id.to_string())) {
                 return Some(artifact.clone());
             }
         }
@@ -151,6 +154,7 @@ impl ArtifactStore {
         let db = self.db.clone();
         let artifact_id = artifact_id.to_string();
         let project_id = project_id.to_string();
+        let cache_project_id = project_id.clone();
         let cache = self.cache.clone();
         let blocking_artifact_id = artifact_id.clone();
         let cache_artifact_id = artifact_id;
@@ -183,7 +187,10 @@ impl ArtifactStore {
         .flatten();
 
         if let Some(ref artifact) = artifact {
-            cache.lock().await.put(cache_artifact_id, artifact.clone());
+            cache
+                .lock()
+                .await
+                .put((cache_project_id, cache_artifact_id), artifact.clone());
         }
         artifact
     }
@@ -197,6 +204,7 @@ impl ArtifactStore {
         let db = self.db.clone();
         let execution_id = execution_id.to_string();
         let project_id = project_id.to_string();
+        let cache_project_id = project_id.clone();
         let cache = self.cache.clone();
         let pairs = tokio::task::spawn_blocking(move || {
             let conn = db.blocking_lock();
@@ -247,7 +255,7 @@ impl ArtifactStore {
         {
             let mut cache = cache.lock().await;
             for (id, artifact) in &pairs {
-                cache.put(id.clone(), artifact.clone());
+                cache.put((cache_project_id.clone(), id.clone()), artifact.clone());
             }
         }
         pairs
@@ -362,17 +370,14 @@ impl ArtifactStore {
         .unwrap_or(false);
 
         if deleted {
-            cache.lock().await.pop(&artifact_id);
+            cache.lock().await.pop(&(project_id, artifact_id));
         }
         deleted
     }
 
     fn blob_path(&self, project_id: &str, hash: &str) -> PathBuf {
         let prefix = &hash[..std::cmp::min(2, hash.len())];
-        self.blob_dir
-            .join(project_id)
-            .join(prefix)
-            .join(hash)
+        self.blob_dir.join(project_id).join(prefix).join(hash)
     }
 
     fn kind_of(artifact: &Artifact) -> String {
@@ -508,7 +513,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let store = test_store(&tmp);
 
-        let mut prov_a = Provenance {
+        let prov_a = Provenance {
             execution_id: "exec-a".into(),
             project_id: Some("project-a".into()),
             ..Default::default()
@@ -520,7 +525,7 @@ mod tests {
         };
         let id_a = store.store(artifact_a, Some(prov_a.clone())).await.unwrap();
 
-        let mut prov_b = Provenance {
+        let prov_b = Provenance {
             execution_id: "exec-b".into(),
             project_id: Some("project-b".into()),
             ..Default::default()
@@ -548,7 +553,10 @@ mod tests {
         // Cross-project execution scoping.
         let a_by_exec = store.get_by_execution("exec-a", "project-a").await;
         assert_eq!(a_by_exec.len(), 1);
-        assert!(store.get_by_execution("exec-a", "project-b").await.is_empty());
+        assert!(store
+            .get_by_execution("exec-a", "project-b")
+            .await
+            .is_empty());
 
         // Deletion is scoped.
         assert!(!store.delete(&id_a, "project-b").await);
@@ -568,7 +576,13 @@ mod tests {
             )
             .await
             .unwrap();
-        assert!(store.get_provenance(&prov_artifact_id, "project-a").await.is_some());
-        assert!(store.get_provenance(&prov_artifact_id, "project-b").await.is_none());
+        assert!(store
+            .get_provenance(&prov_artifact_id, "project-a")
+            .await
+            .is_some());
+        assert!(store
+            .get_provenance(&prov_artifact_id, "project-b")
+            .await
+            .is_none());
     }
 }

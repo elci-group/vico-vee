@@ -4,7 +4,7 @@
 //! reloader so long-lived deployments can rotate certificates without
 //! restarting the process.
 
-use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+use rustls::pki_types::CertificateDer;
 use rustls::ServerConfig;
 use std::future::Future;
 use std::path::{Path, PathBuf};
@@ -44,9 +44,10 @@ pub fn load_rustls_config(cert_path: &Path, key_path: &Path) -> Result<ServerCon
 
 /// Reloadable TLS configuration holder.
 ///
-/// Holds an `Arc<RwLock<ServerConfig>>` so the underlying rustls config can
-/// be replaced on SIGHUP while active connections continue using their
-/// previously accepted config.
+/// Holds an `Arc<RwLock<ServerConfig>>`. Each call to `acceptor` builds a fresh
+/// `TlsAcceptor` from the currently held config, so new connections pick up
+/// certificates reloaded via SIGHUP while in-flight connections keep using
+/// their original config.
 #[derive(Clone)]
 pub struct TlsReloader {
     config: Arc<RwLock<ServerConfig>>,
@@ -65,9 +66,10 @@ impl TlsReloader {
         })
     }
 
-    /// Return a `TlsAcceptor` backed by the currently held config.
+    /// Return a fresh `TlsAcceptor` backed by the currently held config.
     pub fn acceptor(&self) -> TlsAcceptor {
-        TlsAcceptor::from(self.config.clone())
+        let guard = self.config.read().expect("TLS config lock poisoned");
+        TlsAcceptor::from(Arc::new(guard.clone()))
     }
 
     /// Reload certificates from disk immediately.
@@ -87,7 +89,9 @@ impl TlsReloader {
     #[cfg(unix)]
     pub fn spawn_sighup_reloader(self) {
         tokio::spawn(async move {
-            let mut stream = match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::hangup()) {
+            let mut stream = match tokio::signal::unix::signal(
+                tokio::signal::unix::SignalKind::hangup(),
+            ) {
                 Ok(s) => s,
                 Err(e) => {
                     tracing::warn!(error = %e, "failed to install SIGHUP handler; cert hot-reload disabled");
@@ -123,43 +127,28 @@ fn load_certs(path: &Path) -> Result<Vec<CertificateDer<'static>>, String> {
     Ok(certs.into_iter().map(|c| c.into_owned()).collect())
 }
 
-fn load_private_key(path: &Path) -> Result<PrivateKeyDer<'static>, String> {
+fn load_private_key(path: &Path) -> Result<rustls::pki_types::PrivateKeyDer<'static>, String> {
     let file = std::fs::File::open(path)
         .map_err(|e| format!("open private key file {}: {e}", path.display()))?;
     let mut reader = std::io::BufReader::new(file);
 
-    // Attempt to read a PKCS#8 key first, then fall back to RSA PKCS#1.
-    let mut keys = rustls_pemfile::pkcs8_private_keys(&mut reader)
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("parse private key file {}: {e}", path.display()))?;
-
-    if let Some(key) = keys.pop() {
-        return Ok(key.into_owned().into());
-    }
-
-    let file = std::fs::File::open(path)
-        .map_err(|e| format!("re-open private key file {}: {e}", path.display()))?;
-    let mut reader = std::io::BufReader::new(file);
-    keys = rustls_pemfile::rsa_private_keys(&mut reader)
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("parse RSA private key file {}: {e}", path.display()))?;
-
-    keys.pop()
-        .map(|k| k.into_owned().into())
+    rustls_pemfile::private_key(&mut reader)
+        .map_err(|e| format!("parse private key file {}: {e}", path.display()))?
         .ok_or_else(|| format!("no private key found in {}", path.display()))
 }
 
-/// Serve an axum `Router` over HTTPS using the provided TLS acceptor.
+/// Serve an axum `Router` over HTTPS using the provided TLS acceptor source.
 ///
 /// Accepts new TLS connections until `shutdown` resolves, then stops
-/// accepting. Existing connections are not forcibly closed.
+/// accepting. Existing connections are not forcibly closed. A fresh acceptor
+/// is fetched for each connection so certificate reloads take effect on new
+/// connections.
 pub async fn serve_https(
     listener: tokio::net::TcpListener,
     app: axum::Router,
-    tls_acceptor: TlsAcceptor,
+    tls_reloader: TlsReloader,
     shutdown: impl Future<Output = ()>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let app = Arc::new(app);
     let mut shutdown = std::pin::pin!(shutdown);
 
     loop {
@@ -171,12 +160,12 @@ pub async fn serve_https(
             accept = listener.accept() => {
                 let (stream, _) = accept?;
                 let app = app.clone();
-                let tls_acceptor = tls_acceptor.clone();
+                let tls_acceptor = tls_reloader.acceptor();
                 tokio::spawn(async move {
                     match tls_acceptor.accept(stream).await {
                         Ok(stream) => {
                             let io = hyper_util::rt::TokioIo::new(stream);
-                            let svc = hyper_util::service::TowerToHyperService::new(app.clone());
+                            let svc = hyper_util::service::TowerToHyperService::new(app);
                             let builder = hyper_util::server::conn::auto::Builder::new(
                                 hyper_util::rt::TokioExecutor::new(),
                             );

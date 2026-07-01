@@ -78,7 +78,10 @@ impl MetricsRegistry {
         let registry = self.clone();
         let state = state.clone();
         tokio::spawn(async move {
-            let stats = state.vee.dashboard_stats(Some(crate::tenant::DEFAULT_PROJECT)).await;
+            let stats = state
+                .vee
+                .dashboard_stats(Some(crate::tenant::DEFAULT_PROJECT))
+                .await;
             if let Some(total) = stats.get("total").and_then(|v| v.as_i64()) {
                 registry.gauge_set("vee_executions_total", total as f64);
             }
@@ -156,7 +159,9 @@ pub async fn set_request_id(mut request: Request<Body>, next: Next) -> Response 
         Err(_) => header::HeaderValue::from_static("invalid-request-id"),
     };
 
-    request.headers_mut().insert("x-request-id", header_value.clone());
+    request
+        .headers_mut()
+        .insert("x-request-id", header_value.clone());
 
     let mut response = next.run(request).await;
     response.headers_mut().insert("x-request-id", header_value);

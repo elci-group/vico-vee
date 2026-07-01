@@ -526,6 +526,7 @@ mod tests {
             artifact_id: "art-left".into(),
             task_id: execution_id.into(),
             execution_id: execution_id.into(),
+            project_id: None,
             creator_agent: "test".into(),
             parent_artifacts: vec![],
             code_generator: "test".into(),
@@ -584,6 +585,7 @@ mod tests {
             },
             hypothesis: None,
             provenance: provenance.clone(),
+            project_id: None,
         };
 
         let mut registry = crate::capability::CapabilityRegistry::new_with_seed([33u8; 32]);

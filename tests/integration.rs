@@ -199,9 +199,11 @@ async fn shell_submit_status_list_artifacts() {
         .unwrap()
         .iter()
         .find_map(|v| v["artifact"]["Text"]["content"].as_str());
-    assert!(stdout
-        .expect("stdout artifact missing")
-        .contains("hello from shell integration test"));
+    assert!(
+        stdout
+            .expect(&format!("stdout artifact missing: {}", artifacts["artifacts"]))
+            .contains("hello from shell integration test")
+    );
 
     server.stop().await;
 }

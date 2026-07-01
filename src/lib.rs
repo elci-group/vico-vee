@@ -11,10 +11,14 @@
 
 pub mod artifact;
 pub mod audit;
+pub mod auth;
+pub mod backup;
 pub mod capability;
 pub mod checkpoint;
 pub mod config;
 pub mod daemon;
+pub mod health;
+pub mod limit;
 pub mod migrations;
 pub mod openapi;
 pub mod osmosis;
@@ -23,6 +27,8 @@ pub mod pattern;
 pub mod provenance;
 pub mod sandbox;
 pub mod server;
+pub mod tenant;
+pub mod tls;
 pub mod types;
 pub mod validation;
 pub mod worker;

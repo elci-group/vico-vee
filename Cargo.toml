@@ -17,15 +17,9 @@ tokio-util = { version = "0.7", features = ["rt"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
 axum = { version = "0.8", features = ["macros", "ws"] }
-tower = { version = "0.5", features = ["timeout"] }
+tower = "0.5"
 tower-http = { version = "0.6", features = ["cors", "limit"] }
 reqwest = { version = "0.12", features = ["json", "stream"] }
-rustls = "0.23"
-rustls-pemfile = "2"
-tokio-rustls = "0.26"
-hyper = { version = "1", features = ["full"] }
-hyper-util = { version = "0.1", features = ["full"] }
-http-body-util = "0.1"
 async-trait = "0.1"
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }

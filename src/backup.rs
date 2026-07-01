@@ -52,11 +52,15 @@ pub fn require_admin(
         .strip_prefix("Bearer ")
         .or_else(|| header.strip_prefix("bearer "))
         .ok_or_else(|| {
-            (StatusCode::UNAUTHORIZED, "Authorization header must be Bearer <key>").into_response()
+            (
+                StatusCode::UNAUTHORIZED,
+                "Authorization header must be Bearer <key>",
+            )
+                .into_response()
         })?;
-    let scopes = keys.get(token).ok_or_else(|| {
-        (StatusCode::UNAUTHORIZED, "invalid API key").into_response()
-    })?;
+    let scopes = keys
+        .get(token)
+        .ok_or_else(|| (StatusCode::UNAUTHORIZED, "invalid API key").into_response())?;
     if !scopes.contains("admin") {
         return Err((StatusCode::FORBIDDEN, "insufficient scope").into_response());
     }
@@ -72,7 +76,11 @@ async fn check_admin(headers: &HeaderMap, state: &AppState) -> Result<(), Respon
     let keys = tokio::task::spawn_blocking(move || load_api_keys(&keys_file))
         .await
         .map_err(|e| {
-            (StatusCode::INTERNAL_SERVER_ERROR, format!("load keys task: {e}")).into_response()
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("load keys task: {e}"),
+            )
+                .into_response()
         })?
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e).into_response())?;
     require_admin(auth_header.as_deref(), &keys)
@@ -93,8 +101,7 @@ pub fn create_backup(data_dir: &Path, output: &Path) -> Result<PathBuf, String> 
     };
 
     if let Some(parent) = dest.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("create backup parent dir: {e}"))?;
+        std::fs::create_dir_all(parent).map_err(|e| format!("create backup parent dir: {e}"))?;
     }
 
     let file = std::fs::File::create(&dest).map_err(|e| format!("create backup file: {e}"))?;
@@ -126,14 +133,14 @@ pub fn create_backup(data_dir: &Path, output: &Path) -> Result<PathBuf, String> 
     let enc = tar
         .into_inner()
         .map_err(|e| format!("finish tar archive: {e}"))?;
-    enc.finish().map_err(|e| format!("finish gzip stream: {e}"))?;
+    enc.finish()
+        .map_err(|e| format!("finish gzip stream: {e}"))?;
 
     Ok(dest)
 }
 
 fn snapshot_db(src: &Path, dst: &Path) -> Result<(), String> {
-    let src_conn =
-        rusqlite::Connection::open(src).map_err(|e| format!("open source db: {e}"))?;
+    let src_conn = rusqlite::Connection::open(src).map_err(|e| format!("open source db: {e}"))?;
     let mut dst_conn =
         rusqlite::Connection::open(dst).map_err(|e| format!("open snapshot db: {e}"))?;
     let backup = rusqlite::backup::Backup::new(&src_conn, &mut dst_conn)
@@ -157,7 +164,10 @@ pub fn restore_backup(data_dir: &Path, archive: &Path) -> Result<(), String> {
 }
 
 /// CLI entry point for the `backup` command.
-pub fn run_backup(config: &crate::config::Config, output: Option<PathBuf>) -> Result<PathBuf, String> {
+pub fn run_backup(
+    config: &crate::config::Config,
+    output: Option<PathBuf>,
+) -> Result<PathBuf, String> {
     let output_path = output.unwrap_or_else(|| {
         std::env::current_dir()
             .unwrap_or_else(|_| PathBuf::from("."))
@@ -203,9 +213,8 @@ pub async fn admin_backup(State(state): State<AppState>, headers: HeaderMap) -> 
                         ),
                         (
                             header::CONTENT_DISPOSITION,
-                            HeaderValue::try_from(disposition).unwrap_or_else(|_| {
-                                HeaderValue::from_static("attachment")
-                            }),
+                            HeaderValue::try_from(disposition)
+                                .unwrap_or_else(|_| HeaderValue::from_static("attachment")),
                         ),
                     ],
                     bytes,
@@ -319,8 +328,7 @@ read-key = ["read"]
         let db_path = data_dir.join("vee_artifacts.db");
         {
             let conn = rusqlite::Connection::open(&db_path).unwrap();
-            conn.execute("CREATE TABLE test (id INTEGER)", [])
-                .unwrap();
+            conn.execute("CREATE TABLE test (id INTEGER)", []).unwrap();
         }
 
         let artifacts_dir = data_dir.join("artifacts");
@@ -437,8 +445,11 @@ read-key = ["read"]
         let config_dir = tmp.path().join("config");
         std::fs::create_dir_all(&config_dir).unwrap();
         let keys_path = config_dir.join("api_keys.toml");
-        write_keys_file(&keys_path, r#"[keys]
-admin-key = ["admin"]"#);
+        write_keys_file(
+            &keys_path,
+            r#"[keys]
+admin-key = ["admin"]"#,
+        );
 
         // Seed the data directory.
         std::fs::create_dir_all(&data_dir).unwrap();

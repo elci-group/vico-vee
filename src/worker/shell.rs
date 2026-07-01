@@ -71,6 +71,19 @@ impl RuntimeWorker for ShellWorker {
         let work_dir = base_dir.path().join("work");
         let output_dir = base_dir.path().join("output");
 
+        std::fs::create_dir_all(&work_dir).map_err(|e| ExecutionError {
+            code: "SANDBOX_SETUP_FAILED".into(),
+            message: format!("Failed to create work dir: {}", e),
+            recoverable: true,
+            recovery_hint: None,
+        })?;
+        std::fs::create_dir_all(&output_dir).map_err(|e| ExecutionError {
+            code: "SANDBOX_SETUP_FAILED".into(),
+            message: format!("Failed to create output dir: {}", e),
+            recoverable: true,
+            recovery_hint: None,
+        })?;
+
         let script_path = work_dir.join("script.sh");
         std::fs::write(&script_path, &task.source_code).map_err(|e| ExecutionError {
             code: "WRITE_FAILED".into(),

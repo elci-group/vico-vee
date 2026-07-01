@@ -152,7 +152,12 @@ async fn shell_submit_status_list_artifacts() {
     let terminal = wait_terminal(&client, &server.addr, ADMIN_TOKEN, exec_id, None)
         .await
         .expect("shell task should reach a terminal state");
-    assert_eq!(terminal["data"]["status"], "Completed");
+    assert_eq!(
+        terminal["data"]["status"],
+        "Completed",
+        "shell task failed: {:?}",
+        terminal["data"]["error_log"].as_str()
+    );
 
     let status = fetch_status(&client, &server.addr, ADMIN_TOKEN, exec_id, None)
         .await

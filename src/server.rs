@@ -11,10 +11,8 @@ use axum::{
 };
 use serde::Deserialize;
 use std::sync::Arc;
-use std::time::Duration;
 use tokio::sync::Mutex;
 use tower::ServiceBuilder;
-use tower::timeout::TimeoutLayer;
 use tower_http::limit::RequestBodyLimitLayer;
 
 use crate::{
@@ -162,7 +160,6 @@ pub fn router(state: AppState) -> Router {
         .body_limit_mb
         .saturating_mul(1024)
         .saturating_mul(1024);
-    let timeout = Duration::from_secs(state.config.request_timeout_secs);
 
     Router::new()
         .route("/health", get(health))
@@ -188,7 +185,10 @@ pub fn router(state: AppState) -> Router {
         .route("/vee/reject", post(vee_reject))
         .layer(
             ServiceBuilder::new()
-                .layer(TimeoutLayer::new(timeout))
+                .layer(axum::middleware::from_fn_with_state(
+                    state.clone(),
+                    crate::limit::timeout_middleware,
+                ))
                 .layer(axum::middleware::from_fn_with_state(
                     state.clone(),
                     crate::limit::agent_rate_limit_middleware,

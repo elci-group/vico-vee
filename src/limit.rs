@@ -118,6 +118,23 @@ pub async fn ip_rate_limit_middleware(
     Ok(next.run(req).await)
 }
 
+/// Middleware that enforces a request handling timeout.
+pub async fn timeout_middleware(
+    State(state): State<crate::server::AppState>,
+    req: Request,
+    next: Next,
+) -> Result<Response, StatusCode> {
+    match tokio::time::timeout(
+        Duration::from_secs(state.config.request_timeout_secs),
+        next.run(req),
+    )
+    .await
+    {
+        Ok(response) => Ok(response),
+        Err(_) => Ok(StatusCode::REQUEST_TIMEOUT.into_response()),
+    }
+}
+
 /// Middleware that applies a per-agent execution rate limit on task submission.
 pub async fn agent_rate_limit_middleware(
     State(state): State<crate::server::AppState>,

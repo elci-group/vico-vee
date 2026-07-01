@@ -36,7 +36,6 @@ pub fn build_provenance(
         artifact_id: artifact_id.to_string(),
         task_id: task_id.to_string(),
         execution_id: execution_id.to_string(),
-        project_id: None,
         creator_agent: creator_agent.to_string(),
         parent_artifacts,
         code_generator: code_generator.to_string(),

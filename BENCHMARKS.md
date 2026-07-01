@@ -26,11 +26,11 @@ Numbers below were collected on the reference machine used during development. R
 
 | Property | Value |
 |---|---|
-| CPU | (run `lscpu` or `sysctl -n machdep.cpu.brand_string`) |
-| RAM | (run `free -h` or `system_profiler SPHardwareDataType`) |
-| OS | (run `uname -a`) |
-| Rust version | (run `rustc --version`) |
-| Date | (run `date -I`) |
+| CPU | Intel Core 5 120U (12 threads) |
+| RAM | 8 GiB |
+| OS | Linux pop-os 6.18.7 x86_64 |
+| Rust version | rustc 1.96.0 |
+| Date | 2026-07-02 |
 
 ## Workloads
 
@@ -42,9 +42,10 @@ Submits 1000 trivial shell tasks (`echo noop`) concurrently across 10 clients an
 |---|---|
 | Samples | 10 |
 | Tasks per iteration | 1000 |
-| p50 latency | _TBD_ |
-| p99 latency | _TBD_ |
-| Approx. throughput | _TBD_ tasks/s |
+| Mean batch time | ~16.0 s |
+| Criterion throughput | ~62.5 tasks/s |
+| p50 latency | 125.4 ms |
+| p99 latency | 871.0 ms |
 
 > **Note:** The benchmark intentionally uses `shell` rather than `python` to avoid Python interpreter availability skewing results across environments.
 

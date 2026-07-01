@@ -97,7 +97,7 @@ fn bench_submit_1000_noop_python(c: &mut Criterion) {
             .await
             .unwrap();
     });
-    rt.block_on(tokio::time::sleep(Duration::from_millis(50)));
+    std::thread::sleep(Duration::from_millis(50));
 
     let client = Client::new();
 

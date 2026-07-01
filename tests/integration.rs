@@ -197,12 +197,10 @@ async fn shell_submit_status_list_artifacts() {
         .as_array()
         .unwrap()
         .iter()
-        .find_map(|v| v["Text"]["content"].as_str());
+        .find(|v| v["type"] == "Text")
+        .and_then(|v| v["data"]["content"].as_str());
     assert!(stdout
-        .expect(&format!(
-            "stdout artifact missing: {}",
-            terminal["data"]["artifacts"]
-        ))
+        .expect("stdout artifact missing")
         .contains("hello from shell integration test"));
 
     let artifacts_url = format!("http://{}/vee/artifacts", server.addr);

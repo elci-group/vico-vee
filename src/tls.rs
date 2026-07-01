@@ -165,7 +165,7 @@ pub async fn serve_https(
     loop {
         tokio::select! {
             _ = &mut shutdown => {
-                tracing::info("stopping HTTPS listener");
+                tracing::info!("stopping HTTPS listener");
                 break;
             }
             accept = listener.accept() => {
@@ -176,7 +176,7 @@ pub async fn serve_https(
                     match tls_acceptor.accept(stream).await {
                         Ok(stream) => {
                             let io = hyper_util::rt::TokioIo::new(stream);
-                            let svc = app.clone();
+                            let svc = hyper_util::service::TowerToHyperService::new(app.clone());
                             let builder = hyper_util::server::conn::auto::Builder::new(
                                 hyper_util::rt::TokioExecutor::new(),
                             );

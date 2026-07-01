@@ -78,7 +78,7 @@ impl MetricsRegistry {
         let registry = self.clone();
         let state = state.clone();
         tokio::spawn(async move {
-            let stats = state.vee.dashboard_stats().await;
+            let stats = state.vee.dashboard_stats(Some(crate::tenant::DEFAULT_PROJECT)).await;
             if let Some(total) = stats.get("total").and_then(|v| v.as_i64()) {
                 registry.gauge_set("vee_executions_total", total as f64);
             }

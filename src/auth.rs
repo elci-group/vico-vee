@@ -8,7 +8,7 @@ use axum::{
     extract::{Request, State},
     http::{header, StatusCode},
     middleware::Next,
-    response::{IntoResponse, Response},
+    response::Response,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -91,9 +91,10 @@ impl AuthKeys {
                 },
             );
         }
+        let has_keys = !map.is_empty();
         Ok(Self {
             keys: map,
-            require_auth: require_auth && !map.is_empty(),
+            require_auth: require_auth && has_keys,
         })
     }
 

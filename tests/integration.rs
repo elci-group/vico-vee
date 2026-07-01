@@ -71,6 +71,17 @@ async fn python_submit_status_list_artifacts_and_cancel() {
     assert!(ids.contains(&exec_id));
 
     // Artifacts endpoint returns artifacts, including stdout as text.
+    // The full execution result includes stdout as a text artifact.
+    let stdout = terminal["data"]["artifacts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find_map(|v| v["Text"]["content"].as_str());
+    assert!(stdout
+        .expect("stdout artifact missing")
+        .contains("hello from python integration test"));
+
+    // The artifacts endpoint returns lightweight summaries.
     let artifacts_url = format!("http://{}/vee/artifacts", server.addr);
     let artifacts: Value = client
         .post(&artifacts_url)
@@ -83,14 +94,12 @@ async fn python_submit_status_list_artifacts_and_cancel() {
         .await
         .unwrap();
     assert!(artifacts["success"].as_bool().unwrap());
-    let stdout = artifacts["artifacts"]
+    let has_text_summary = artifacts["artifacts"]
         .as_array()
         .unwrap()
         .iter()
-        .find_map(|v| v["artifact"]["Text"]["content"].as_str());
-    assert!(stdout
-        .expect("stdout artifact missing")
-        .contains("hello from python integration test"));
+        .any(|v| v["artifact"]["artifact_type"].as_str() == Some("text"));
+    assert!(has_text_summary, "expected a text artifact summary");
 
     // Cancel a long-running Python task before it finishes.
     let cancel_resp = submit_code(

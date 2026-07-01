@@ -108,9 +108,9 @@ fn bench_submit_1000_noop_python(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("noop_python_submit");
     group.throughput(Throughput::Elements(1000));
-    group.warm_up_time(Duration::from_secs(1));
-    group.sample_size(3);
-    group.measurement_time(Duration::from_secs(15));
+    group.warm_up_time(Duration::from_secs(3));
+    group.sample_size(10);
+    group.measurement_time(Duration::from_secs(300));
 
     group.bench_function("1000_tasks", |b| {
         b.iter(|| {

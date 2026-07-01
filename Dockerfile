@@ -3,7 +3,7 @@
 # Produces a small image containing only the statically linked binary and the
 # embedded migration files.
 
-FROM rust:1.85-slim-bookworm AS builder
+FROM rust:1.96-slim-bookworm AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libdbus-1-dev \

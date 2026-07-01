@@ -177,7 +177,7 @@ pub async fn wait_terminal(
     for _ in 0..120 {
         if let Some(value) = fetch_status(client, addr, token, execution_id, project).await {
             if let Some(status) = value["data"]["status"].as_str() {
-                if matches!(status, "completed" | "failed" | "cancelled") {
+                if matches!(status, "Completed" | "Failed" | "Cancelled") {
                     return Some(value);
                 }
             }

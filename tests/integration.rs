@@ -124,7 +124,7 @@ async fn python_submit_status_list_artifacts_and_cancel() {
     let terminal_cancel = wait_terminal(&client, &server.addr, ADMIN_TOKEN, cancel_id, None)
         .await
         .expect("cancelled task should reach terminal state");
-    assert_eq!(terminal_cancel["data"]["status"], "cancelled");
+    assert_eq!(terminal_cancel["data"]["status"], "Cancelled");
 
     server.stop().await;
 }
@@ -153,7 +153,7 @@ async fn shell_submit_status_list_artifacts() {
     let terminal = wait_terminal(&client, &server.addr, ADMIN_TOKEN, exec_id, None)
         .await
         .expect("shell task should reach a terminal state");
-    assert_eq!(terminal["data"]["status"], "completed");
+    assert_eq!(terminal["data"]["status"], "Completed");
 
     let status = fetch_status(&client, &server.addr, ADMIN_TOKEN, exec_id, None)
         .await

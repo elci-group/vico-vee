@@ -23,26 +23,7 @@ use crate::{
 };
 
 /// Server configuration.
-#[derive(Debug, Clone)]
-pub struct Config {
-    pub port: u16,
-    pub data_dir: std::path::PathBuf,
-    pub ollama_url: String,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            port: std::env::var("VICO_VEE_PORT")
-                .ok()
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(9987),
-            data_dir: crate::paths::vee_data_dir(),
-            ollama_url: std::env::var("VICO_VEE_OLLAMA_URL")
-                .unwrap_or_else(|_| "http://127.0.0.1:11434".into()),
-        }
-    }
-}
+pub use crate::config::Config;
 
 /// Shared application state.
 #[derive(Clone)]

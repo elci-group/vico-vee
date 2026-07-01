@@ -213,8 +213,7 @@ pub async fn python_execution_available(server: &TestServer) -> bool {
         return false;
     };
     let terminal = wait_terminal(&client, &server.addr, ADMIN_TOKEN, id, None).await;
-    terminal
-        .and_then(|v| v["data"]["status"].as_str().map(String::from))
+    terminal.and_then(|v| v["data"]["status"].as_str().map(String::from))
         == Some("completed".to_string())
 }
 

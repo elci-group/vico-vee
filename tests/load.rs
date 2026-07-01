@@ -204,7 +204,12 @@ async fn large_artifact_upload_download_round_trip() {
     assert_eq!(restore_resp.status(), StatusCode::OK);
 
     // Verify the restored file on disk.
-    let restored_path = server.state.config.data_dir.join("artifacts").join("large.bin");
+    let restored_path = server
+        .state
+        .config
+        .data_dir
+        .join("artifacts")
+        .join("large.bin");
     let restored = tokio::fs::read(&restored_path).await.unwrap();
     assert_eq!(restored.len(), payload_size);
     assert_eq!(restored, data);

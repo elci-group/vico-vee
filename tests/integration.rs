@@ -86,11 +86,9 @@ async fn python_submit_status_list_artifacts_and_cancel() {
         .unwrap()
         .iter()
         .find_map(|v| v["artifact"]["Text"]["content"].as_str());
-    assert!(
-        stdout
-            .expect("stdout artifact missing")
-            .contains("hello from python integration test")
-    );
+    assert!(stdout
+        .expect("stdout artifact missing")
+        .contains("hello from python integration test"));
 
     // Cancel a long-running Python task before it finishes.
     let cancel_resp = submit_code(
@@ -194,11 +192,9 @@ async fn shell_submit_status_list_artifacts() {
         .unwrap()
         .iter()
         .find_map(|v| v["artifact"]["Text"]["content"].as_str());
-    assert!(
-        stdout
-            .expect("stdout artifact missing")
-            .contains("hello from shell integration test")
-    );
+    assert!(stdout
+        .expect("stdout artifact missing")
+        .contains("hello from shell integration test"));
 
     server.stop().await;
 }
@@ -299,7 +295,10 @@ async fn rate_limit_ip_burst_returns_429_with_retry_after() {
         .map(|r| r.unwrap())
         .collect();
 
-    let ok_count = responses.iter().filter(|r| r.status() == StatusCode::OK).count();
+    let ok_count = responses
+        .iter()
+        .filter(|r| r.status() == StatusCode::OK)
+        .count();
     let rate_limited: Vec<_> = responses
         .iter()
         .filter(|r| r.status() == StatusCode::TOO_MANY_REQUESTS)
@@ -352,7 +351,10 @@ async fn rate_limit_agent_burst_returns_429() {
         .map(|r| r.unwrap())
         .collect();
 
-    let ok_count = responses.iter().filter(|r| r.status() == StatusCode::OK).count();
+    let ok_count = responses
+        .iter()
+        .filter(|r| r.status() == StatusCode::OK)
+        .count();
     let rate_limited = responses
         .iter()
         .filter(|r| r.status() == StatusCode::TOO_MANY_REQUESTS)
@@ -393,9 +395,14 @@ async fn tls_self_signed_cert_connects() {
     let shutdown = CancellationToken::new();
     let shutdown_clone = shutdown.clone();
     let handle = tokio::spawn(async move {
-        vico_vee::tls::serve_https(listener, app, tls_reloader, shutdown_clone.cancelled_owned())
-            .await
-            .unwrap();
+        vico_vee::tls::serve_https(
+            listener,
+            app,
+            tls_reloader,
+            shutdown_clone.cancelled_owned(),
+        )
+        .await
+        .unwrap();
     });
     tokio::time::sleep(Duration::from_millis(50)).await;
 
@@ -507,8 +514,22 @@ async fn multi_tenancy_project_isolation() {
         .unwrap()
         .to_string();
 
-    wait_terminal(&client, &server.addr, ADMIN_TOKEN, &alpha_id, Some("project-alpha")).await;
-    wait_terminal(&client, &server.addr, ADMIN_TOKEN, &beta_id, Some("project-beta")).await;
+    wait_terminal(
+        &client,
+        &server.addr,
+        ADMIN_TOKEN,
+        &alpha_id,
+        Some("project-alpha"),
+    )
+    .await;
+    wait_terminal(
+        &client,
+        &server.addr,
+        ADMIN_TOKEN,
+        &beta_id,
+        Some("project-beta"),
+    )
+    .await;
 
     // Status lookups across projects must fail (return success:false / not found).
     let cross_alpha = fetch_status(
@@ -520,7 +541,9 @@ async fn multi_tenancy_project_isolation() {
     )
     .await;
     assert!(
-        cross_alpha.map(|v| v["success"].as_bool() == Some(false)).unwrap_or(true),
+        cross_alpha
+            .map(|v| v["success"].as_bool() == Some(false))
+            .unwrap_or(true),
         "alpha execution should not be visible from project-beta"
     );
 
@@ -533,7 +556,9 @@ async fn multi_tenancy_project_isolation() {
     )
     .await;
     assert!(
-        cross_beta.map(|v| v["success"].as_bool() == Some(false)).unwrap_or(true),
+        cross_beta
+            .map(|v| v["success"].as_bool() == Some(false))
+            .unwrap_or(true),
         "beta execution should not be visible from project-alpha"
     );
 

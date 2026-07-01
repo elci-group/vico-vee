@@ -141,11 +141,7 @@ fn bench_submit_1000_noop_python(c: &mut Criterion) {
         all.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap());
         let p50 = percentile(&all, 0.5);
         let p99 = percentile(&all, 0.99);
-        let throughput = if p50 > 0.0 {
-            1000.0 / p50
-        } else {
-            0.0
-        };
+        let throughput = if p50 > 0.0 { 1000.0 / p50 } else { 0.0 };
         eprintln!(
             "\nvico-vee noop Python submit distribution (N={}): p50={:.3}ms, p99={:.3}ms, approx throughput={:.1} tasks/ms",
             all.len(), p50, p99, throughput

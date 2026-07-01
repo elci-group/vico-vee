@@ -10,40 +10,32 @@ use vico_vee::config::{Cli, Config, LogFormat};
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
-    let config = Config::load(Some(cli))?;
+    let config = Config::load(cli)?;
 
-    init_tracing(&config);
+    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| "vico_vee=info,tower_http=info".into());
+
+    match config.log_format {
+        LogFormat::Json => {
+            tracing_subscriber::registry()
+                .with(env_filter)
+                .with(tracing_subscriber::fmt::layer().json())
+                .init();
+        }
+        LogFormat::Pretty => {
+            tracing_subscriber::registry()
+                .with(env_filter)
+                .with(tracing_subscriber::fmt::layer())
+                .init();
+        }
+    }
 
     let state = vico_vee::server::AppState::try_new(config.clone()).await?;
 
     let app = vico_vee::server::router(state);
-    let addr = format!("{}:{}", config.bind, config.port);
-    let listener = tokio::net::TcpListener::bind(&addr).await?;
+    let listener = tokio::net::TcpListener::bind((config.bind.as_str(), config.port)).await?;
 
-    tracing::info!(addr = %addr, "vico-vee listening");
+    tracing::info!(bind = %config.bind, port = config.port, "vico-vee listening");
     axum::serve(listener, app).await?;
     Ok(())
-}
-
-fn init_tracing(config: &Config) {
-    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| "vico_vee=info,tower_http=info".into());
-
-    let registry = tracing_subscriber::registry().with(env_filter);
-
-    match config.log_format {
-        LogFormat::Json => {
-            registry
-                .with(tracing_subscriber::fmt::layer().json())
-                .init();
-        }
-        LogFormat::Compact => {
-            registry
-                .with(tracing_subscriber::fmt::layer().compact())
-                .init();
-        }
-        LogFormat::Pretty => {
-            registry.with(tracing_subscriber::fmt::layer()).init();
-        }
-    }
 }

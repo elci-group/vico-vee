@@ -5,6 +5,7 @@
 //! survive process restarts. An in-memory LRU cache sits in front of blob
 //! reads.
 
+use crate::tenant::DEFAULT_PROJECT;
 use crate::types::{Artifact, ArtifactSummary, Provenance};
 use lru::LruCache;
 use rusqlite::{params, Connection, OptionalExtension};
@@ -17,13 +18,14 @@ const ARTIFACT_CACHE_SIZE: usize = 128;
 pub struct ArtifactStore {
     db: Arc<tokio::sync::Mutex<Connection>>,
     blob_dir: PathBuf,
-    cache: Arc<tokio::sync::Mutex<LruCache<String, Artifact>>>,
+    cache: Arc<tokio::sync::Mutex<LruCache<(String, String), Artifact>>>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 struct ArtifactMetadata {
     pub kind: String,
     pub execution_id: String,
+    pub project_id: String,
     pub size_bytes: u64,
     pub mime_type: Option<String>,
 }
@@ -71,11 +73,16 @@ impl ArtifactStore {
             .as_ref()
             .map(|p| p.execution_id.clone())
             .unwrap_or_default();
+        let project_id = provenance
+            .as_ref()
+            .and_then(|p| p.project_id.clone())
+            .unwrap_or_else(|| DEFAULT_PROJECT.into());
         let kind = Self::kind_of(&artifact);
         let summary = ArtifactSummary::from(&artifact);
         let metadata = ArtifactMetadata {
             kind: kind.clone(),
             execution_id: execution_id.clone(),
+            project_id: project_id.clone(),
             size_bytes: summary.size_bytes,
             mime_type: summary.mime_type.clone(),
         };
@@ -83,7 +90,7 @@ impl ArtifactStore {
         let blob = serde_json::to_vec(&artifact)
             .map_err(|e| format!("failed to serialize artifact: {}", e))?;
         let hash = blake3::hash(&blob).to_hex().to_string();
-        let blob_path = self.blob_path(&hash);
+        let blob_path = self.blob_path(&project_id, &hash);
 
         let db = self.db.clone();
         let blob_path_clone = blob_path.clone();
@@ -93,6 +100,7 @@ impl ArtifactStore {
         let metadata_json = serde_json::to_string(&metadata).unwrap_or_default();
         let id_for_db = id.clone();
         let execution_id_for_db = execution_id.clone();
+        let project_id_for_db = project_id.clone();
         let kind_for_db = kind.clone();
         let hash_for_db = hash.clone();
         let cache = self.cache.clone();
@@ -108,11 +116,12 @@ impl ArtifactStore {
             let conn = db.blocking_lock();
             conn.execute(
                 "INSERT OR REPLACE INTO vee_artifacts
-                 (artifact_id, execution_id, kind, metadata_json, blob_path, blob_hash, provenance_json, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, datetime('now'))",
+                 (artifact_id, execution_id, project_id, kind, metadata_json, blob_path, blob_hash, provenance_json, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, datetime('now'))",
                 params![
                     id_for_db,
                     execution_id_for_db,
+                    project_id_for_db,
                     kind_for_db,
                     metadata_json,
                     blob_path_clone.to_string_lossy().to_string(),
@@ -126,21 +135,26 @@ impl ArtifactStore {
         .await
         .map_err(|e| format!("artifact store task failed: {}", e))??;
 
-        cache.lock().await.put(id.clone(), artifact_for_cache);
+        cache
+            .lock()
+            .await
+            .put((project_id.clone(), id.clone()), artifact_for_cache);
         Ok(id)
     }
 
-    /// Retrieve an artifact by ID.
-    pub async fn get(&self, artifact_id: &str) -> Option<Artifact> {
+    /// Retrieve an artifact by ID. The artifact must belong to `project_id`.
+    pub async fn get(&self, artifact_id: &str, project_id: &str) -> Option<Artifact> {
         {
             let mut cache = self.cache.lock().await;
-            if let Some(artifact) = cache.get(artifact_id) {
+            if let Some(artifact) = cache.get(&(project_id.to_string(), artifact_id.to_string())) {
                 return Some(artifact.clone());
             }
         }
 
         let db = self.db.clone();
         let artifact_id = artifact_id.to_string();
+        let project_id = project_id.to_string();
+        let cache_project_id = project_id.clone();
         let cache = self.cache.clone();
         let blocking_artifact_id = artifact_id.clone();
         let cache_artifact_id = artifact_id;
@@ -148,8 +162,8 @@ impl ArtifactStore {
             let conn = db.blocking_lock();
             let path: Option<String> = conn
                 .query_row(
-                    "SELECT blob_path FROM vee_artifacts WHERE artifact_id = ?1",
-                    [&blocking_artifact_id],
+                    "SELECT blob_path FROM vee_artifacts WHERE artifact_id = ?1 AND project_id = ?2",
+                    [&blocking_artifact_id, &project_id],
                     |row| row.get(0),
                 )
                 .optional()
@@ -173,28 +187,37 @@ impl ArtifactStore {
         .flatten();
 
         if let Some(ref artifact) = artifact {
-            cache.lock().await.put(cache_artifact_id, artifact.clone());
+            cache
+                .lock()
+                .await
+                .put((cache_project_id, cache_artifact_id), artifact.clone());
         }
         artifact
     }
 
-    /// Get artifacts for a specific execution.
-    pub async fn get_by_execution(&self, execution_id: &str) -> Vec<(String, Artifact)> {
+    /// Get artifacts for a specific execution within a project.
+    pub async fn get_by_execution(
+        &self,
+        execution_id: &str,
+        project_id: &str,
+    ) -> Vec<(String, Artifact)> {
         let db = self.db.clone();
         let execution_id = execution_id.to_string();
+        let project_id = project_id.to_string();
+        let cache_project_id = project_id.clone();
         let cache = self.cache.clone();
         let pairs = tokio::task::spawn_blocking(move || {
             let conn = db.blocking_lock();
-            let mut stmt = match conn
-                .prepare("SELECT artifact_id, blob_path FROM vee_artifacts WHERE execution_id = ?1")
-            {
+            let mut stmt = match conn.prepare(
+                "SELECT artifact_id, blob_path FROM vee_artifacts WHERE project_id = ?1 AND execution_id = ?2",
+            ) {
                 Ok(s) => s,
                 Err(e) => {
                     tracing::warn!(error = %e, "prepare get_by_execution failed");
                     return Vec::new();
                 }
             };
-            let rows = stmt.query_map([&execution_id], |row| {
+            let rows = stmt.query_map([&project_id, &execution_id], |row| {
                 Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
             });
             let pairs = match rows {
@@ -232,26 +255,28 @@ impl ArtifactStore {
         {
             let mut cache = cache.lock().await;
             for (id, artifact) in &pairs {
-                cache.put(id.clone(), artifact.clone());
+                cache.put((cache_project_id.clone(), id.clone()), artifact.clone());
             }
         }
         pairs
     }
 
-    /// List all artifact summaries.
-    pub async fn list_summaries(&self) -> Vec<ArtifactSummary> {
+    /// List artifact summaries for a project.
+    pub async fn list_summaries(&self, project_id: &str) -> Vec<ArtifactSummary> {
         let db = self.db.clone();
+        let project_id = project_id.to_string();
         tokio::task::spawn_blocking(move || {
             let conn = db.blocking_lock();
-            let mut stmt =
-                match conn.prepare("SELECT artifact_id, metadata_json FROM vee_artifacts") {
-                    Ok(s) => s,
-                    Err(e) => {
-                        tracing::warn!(error = %e, "prepare list summaries failed");
-                        return Vec::new();
-                    }
-                };
-            let rows = stmt.query_map([], |row| {
+            let mut stmt = match conn.prepare(
+                "SELECT artifact_id, metadata_json FROM vee_artifacts WHERE project_id = ?1",
+            ) {
+                Ok(s) => s,
+                Err(e) => {
+                    tracing::warn!(error = %e, "prepare list summaries failed");
+                    return Vec::new();
+                }
+            };
+            let rows = stmt.query_map([&project_id], |row| {
                 let id: String = row.get(0)?;
                 let meta: String = row.get(1)?;
                 Ok((id, meta))
@@ -275,16 +300,17 @@ impl ArtifactStore {
         .unwrap_or_default()
     }
 
-    /// Get provenance for an artifact.
-    pub async fn get_provenance(&self, artifact_id: &str) -> Option<Provenance> {
+    /// Get provenance for an artifact within a project.
+    pub async fn get_provenance(&self, artifact_id: &str, project_id: &str) -> Option<Provenance> {
         let db = self.db.clone();
         let artifact_id = artifact_id.to_string();
+        let project_id = project_id.to_string();
         tokio::task::spawn_blocking(move || {
             let conn = db.blocking_lock();
             let json: Option<String> = conn
                 .query_row(
-                    "SELECT provenance_json FROM vee_artifacts WHERE artifact_id = ?1",
-                    [&artifact_id],
+                    "SELECT provenance_json FROM vee_artifacts WHERE artifact_id = ?1 AND project_id = ?2",
+                    [&artifact_id, &project_id],
                     |row| row.get(0),
                 )
                 .optional()
@@ -297,18 +323,21 @@ impl ArtifactStore {
         .flatten()
     }
 
-    /// Delete an artifact and its blob if no other row references it.
-    pub async fn delete(&self, artifact_id: &str) -> bool {
+    /// Delete an artifact within a project and its blob if no other row in the
+    /// same project references it.
+    pub async fn delete(&self, artifact_id: &str, project_id: &str) -> bool {
         let db = self.db.clone();
         let artifact_id = artifact_id.to_string();
+        let project_id = project_id.to_string();
         let cache = self.cache.clone();
         let blocking_artifact_id = artifact_id.clone();
+        let blocking_project_id = project_id.clone();
         let deleted = tokio::task::spawn_blocking(move || {
             let conn = db.blocking_lock();
             let path: Option<String> = conn
                 .query_row(
-                    "SELECT blob_path FROM vee_artifacts WHERE artifact_id = ?1",
-                    [&blocking_artifact_id],
+                    "SELECT blob_path FROM vee_artifacts WHERE artifact_id = ?1 AND project_id = ?2",
+                    [&blocking_artifact_id, &blocking_project_id],
                     |row| row.get(0),
                 )
                 .optional()
@@ -316,16 +345,16 @@ impl ArtifactStore {
                 .flatten();
             let deleted = conn
                 .execute(
-                    "DELETE FROM vee_artifacts WHERE artifact_id = ?1",
-                    [&blocking_artifact_id],
+                    "DELETE FROM vee_artifacts WHERE artifact_id = ?1 AND project_id = ?2",
+                    [&blocking_artifact_id, &blocking_project_id],
                 )
                 .map(|n| n > 0)
                 .unwrap_or(false);
             if let Some(path) = path {
                 let refs: i64 = conn
                     .query_row(
-                        "SELECT COUNT(*) FROM vee_artifacts WHERE blob_path = ?1",
-                        [&path],
+                        "SELECT COUNT(*) FROM vee_artifacts WHERE project_id = ?1 AND blob_path = ?2",
+                        [&blocking_project_id, &path],
                         |row| row.get(0),
                     )
                     .unwrap_or(1);
@@ -341,14 +370,14 @@ impl ArtifactStore {
         .unwrap_or(false);
 
         if deleted {
-            cache.lock().await.pop(&artifact_id);
+            cache.lock().await.pop(&(project_id, artifact_id));
         }
         deleted
     }
 
-    fn blob_path(&self, hash: &str) -> PathBuf {
+    fn blob_path(&self, project_id: &str, hash: &str) -> PathBuf {
         let prefix = &hash[..std::cmp::min(2, hash.len())];
-        self.blob_dir.join(prefix).join(hash)
+        self.blob_dir.join(project_id).join(prefix).join(hash)
     }
 
     fn kind_of(artifact: &Artifact) -> String {
@@ -402,7 +431,7 @@ mod tests {
             line_count: 1,
         };
         let id = store.store(artifact.clone(), None).await.unwrap();
-        let loaded = store.get(&id).await.unwrap();
+        let loaded = store.get(&id, "default").await.unwrap();
         assert!(matches!(loaded, Artifact::Text { content, .. } if content == "hello world"));
     }
 
@@ -420,7 +449,7 @@ mod tests {
             ..Default::default()
         };
         store.store(artifact, Some(provenance)).await.unwrap();
-        let arts = store.get_by_execution("exec-123").await;
+        let arts = store.get_by_execution("exec-123", "default").await;
         assert_eq!(arts.len(), 1);
     }
 
@@ -438,8 +467,8 @@ mod tests {
             level_counts: [(LogLevel::Info, 1)].into_iter().collect(),
         };
         let id = store.store(artifact, None).await.unwrap();
-        assert!(store.delete(&id).await);
-        assert!(store.get(&id).await.is_none());
+        assert!(store.delete(&id, "default").await);
+        assert!(store.get(&id, "default").await.is_none());
     }
 
     #[tokio::test]
@@ -452,8 +481,8 @@ mod tests {
             line_count: 1,
         };
         let id = store.store(artifact, None).await.unwrap();
-        let a1 = store.get(&id).await.unwrap();
-        let a2 = store.get(&id).await.unwrap();
+        let a1 = store.get(&id, "default").await.unwrap();
+        let a2 = store.get(&id, "default").await.unwrap();
         assert!(matches!(a1, Artifact::Text { content, .. } if content == "cached"));
         assert!(matches!(a2, Artifact::Text { content, .. } if content == "cached"));
     }
@@ -468,14 +497,92 @@ mod tests {
             line_count: 1,
         };
         let id = store.store(artifact.clone(), None).await.unwrap();
-        let loaded = store.get(&id).await.unwrap();
+        let loaded = store.get(&id, "default").await.unwrap();
         assert!(matches!(loaded, Artifact::Text { content, .. } if content == "dedup"));
 
         // A second store of identical bytes should reuse the same blob path
         // even though the artifact id is new.
         let id2 = store.store(artifact, None).await.unwrap();
         assert_ne!(id, id2);
-        let loaded2 = store.get(&id2).await.unwrap();
+        let loaded2 = store.get(&id2, "default").await.unwrap();
         assert!(matches!(loaded2, Artifact::Text { content, .. } if content == "dedup"));
+    }
+
+    #[tokio::test]
+    async fn test_project_isolation_artifacts() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = test_store(&tmp);
+
+        let prov_a = Provenance {
+            execution_id: "exec-a".into(),
+            project_id: Some("project-a".into()),
+            ..Default::default()
+        };
+        let artifact_a = Artifact::Text {
+            content: "secret a".into(),
+            format: TextFormat::Plain,
+            line_count: 1,
+        };
+        let id_a = store.store(artifact_a, Some(prov_a.clone())).await.unwrap();
+
+        let prov_b = Provenance {
+            execution_id: "exec-b".into(),
+            project_id: Some("project-b".into()),
+            ..Default::default()
+        };
+        let artifact_b = Artifact::Text {
+            content: "secret b".into(),
+            format: TextFormat::Plain,
+            line_count: 1,
+        };
+        let id_b = store.store(artifact_b, Some(prov_b.clone())).await.unwrap();
+
+        // Each project can read its own artifact.
+        assert!(store.get(&id_a, "project-a").await.is_some());
+        assert!(store.get(&id_b, "project-b").await.is_some());
+
+        // Cross-project reads are denied.
+        assert!(store.get(&id_a, "project-b").await.is_none());
+        assert!(store.get(&id_b, "project-a").await.is_none());
+
+        // Cross-project listing is empty.
+        assert_eq!(store.list_summaries("project-a").await.len(), 1);
+        assert_eq!(store.list_summaries("project-b").await.len(), 1);
+        assert!(store.list_summaries("project-c").await.is_empty());
+
+        // Cross-project execution scoping.
+        let a_by_exec = store.get_by_execution("exec-a", "project-a").await;
+        assert_eq!(a_by_exec.len(), 1);
+        assert!(store
+            .get_by_execution("exec-a", "project-b")
+            .await
+            .is_empty());
+
+        // Deletion is scoped.
+        assert!(!store.delete(&id_a, "project-b").await);
+        assert!(store.delete(&id_a, "project-a").await);
+        assert!(store.get(&id_a, "project-a").await.is_none());
+        assert!(store.get(&id_b, "project-b").await.is_some());
+
+        // Cross-project provenance lookup is denied.
+        let prov_artifact_id = store
+            .store(
+                Artifact::Text {
+                    content: "prov a".into(),
+                    format: TextFormat::Plain,
+                    line_count: 1,
+                },
+                Some(prov_a.clone()),
+            )
+            .await
+            .unwrap();
+        assert!(store
+            .get_provenance(&prov_artifact_id, "project-a")
+            .await
+            .is_some());
+        assert!(store
+            .get_provenance(&prov_artifact_id, "project-b")
+            .await
+            .is_none());
     }
 }

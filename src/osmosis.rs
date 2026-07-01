@@ -26,15 +26,17 @@ impl OsmosisEngine {
         &self,
         project_root: Option<&Path>,
         req: &OsmosisDiffRequest,
+        project_id: Option<&str>,
     ) -> Result<OsmosisDiffResult, String> {
+        let project_id = project_id.unwrap_or(crate::tenant::DEFAULT_PROJECT);
         let left = self
-            .resolve_artifact_text(&req.left)
+            .resolve_artifact_text(&req.left, project_id)
             .await
             .ok_or_else(|| "Could not resolve left artifact as text".to_string())?;
 
         let (right, right_path) = if let Some(right_ref) = &req.right {
             let text = self
-                .resolve_artifact_text(right_ref)
+                .resolve_artifact_text(right_ref, project_id)
                 .await
                 .ok_or_else(|| "Could not resolve right artifact as text".to_string())?;
             (text, Some(right_ref.execution_id.clone()))
@@ -68,9 +70,11 @@ impl OsmosisEngine {
         &self,
         project_root: Option<&Path>,
         req: &OsmosisMergeRequest,
+        project_id: Option<&str>,
     ) -> Result<OsmosisMergeResult, String> {
+        let project_id = project_id.unwrap_or(crate::tenant::DEFAULT_PROJECT);
         let source = self
-            .resolve_artifact_text(&req.source)
+            .resolve_artifact_text(&req.source, project_id)
             .await
             .ok_or_else(|| "Could not resolve source artifact as text".to_string())?;
 
@@ -109,12 +113,14 @@ impl OsmosisEngine {
         &self,
         project_root: Option<&Path>,
         req: &OsmosisRejectRequest,
+        project_id: Option<&str>,
     ) -> Result<OsmosisRejectResult, String> {
+        let project_id = project_id.unwrap_or(crate::tenant::DEFAULT_PROJECT);
         let path = Self::resolve_workspace_path(project_root, &req.target_path)?;
 
         let restored = if let Some(base_ref) = &req.base {
             let base = self
-                .resolve_artifact_text(base_ref)
+                .resolve_artifact_text(base_ref, project_id)
                 .await
                 .ok_or_else(|| "Could not resolve base artifact as text".to_string())?;
             if let Some(parent) = path.parent() {
@@ -130,7 +136,7 @@ impl OsmosisEngine {
             // If no base is supplied and the file currently matches the rejected
             // patch, assume the patch created it and remove it.
             if let Ok(current) = tokio::fs::read_to_string(&path).await {
-                if let Some(source) = self.resolve_artifact_text(&req.source).await {
+                if let Some(source) = self.resolve_artifact_text(&req.source, project_id).await {
                     if current == source {
                         tokio::fs::remove_file(&path)
                             .await
@@ -158,12 +164,16 @@ impl OsmosisEngine {
     ///
     /// Supports `Text`, `Json` and `File` artifacts. If `artifact_id` is `None`,
     /// the first text-like artifact from the execution is used.
-    async fn resolve_artifact_text(&self, reference: &OsmosisArtifactRef) -> Option<String> {
+    async fn resolve_artifact_text(
+        &self,
+        reference: &OsmosisArtifactRef,
+        project_id: &str,
+    ) -> Option<String> {
         let artifact = if let Some(id) = &reference.artifact_id {
-            self.artifact_store.get(id).await
+            self.artifact_store.get(id, project_id).await
         } else {
             self.artifact_store
-                .get_by_execution(&reference.execution_id)
+                .get_by_execution(&reference.execution_id, project_id)
                 .await
                 .into_iter()
                 .find_map(|(_id, art)| if text_artifact(&art) { Some(art) } else { None })
@@ -516,6 +526,7 @@ mod tests {
             artifact_id: "art-left".into(),
             task_id: execution_id.into(),
             execution_id: execution_id.into(),
+            project_id: None,
             creator_agent: "test".into(),
             parent_artifacts: vec![],
             code_generator: "test".into(),
@@ -574,6 +585,7 @@ mod tests {
             },
             hypothesis: None,
             provenance: provenance.clone(),
+            project_id: None,
         };
 
         let mut registry = crate::capability::CapabilityRegistry::new_with_seed([33u8; 32]);

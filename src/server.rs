@@ -5,9 +5,9 @@
 
 use axum::{
     error_handling::HandleErrorLayer,
-    extract::{Json, State},
+    extract::{ws::WebSocketUpgrade, Json, State},
     http::StatusCode,
-    response::Json as JsonResponse,
+    response::{Json as JsonResponse, Response},
     routing::{get, post},
     Router,
 };
@@ -159,6 +159,8 @@ pub const ROUTES: &[&str] = &[
     "/vee/checkpoints",
     "/vee/odin/health",
     "/vee/odin/model",
+    "/vee/events",
+    "/vee/admin/rotate-key",
     "/vee/diff",
     "/vee/merge",
     "/vee/reject",
@@ -191,6 +193,8 @@ pub fn router(state: AppState) -> Router {
         .route("/vee/checkpoints", post(vee_checkpoints))
         .route("/vee/odin/health", post(vee_odin_health))
         .route("/vee/odin/model", post(vee_odin_set_model))
+        .route("/vee/events", get(vee_events_ws))
+        .route("/vee/admin/rotate-key", post(vee_admin_rotate_key))
         .route("/vee/diff", post(vee_diff))
         .route("/vee/merge", post(vee_merge))
         .route("/vee/reject", post(vee_reject))
@@ -506,6 +510,44 @@ pub async fn vee_odin_set_model(
 ) -> JsonResponse<serde_json::Value> {
     state.vee.set_odin_model(input.model).await;
     JsonResponse(serde_json::json!({ "success": true, "message": "ODIN model updated" }))
+}
+
+/// Stream VEE execution events over a WebSocket.
+pub async fn vee_events_ws(
+    State(state): State<AppState>,
+    ws: WebSocketUpgrade,
+) -> Response {
+    ws.on_upgrade(move |socket| vee_events_socket(state, socket))
+}
+
+async fn vee_events_socket(state: AppState, mut socket: axum::extract::ws::WebSocket) {
+    let mut rx = state.vee.subscribe_events();
+    while let Ok(event) = rx.recv().await {
+        if let Ok(text) = serde_json::to_string(&event) {
+            if socket
+                .send(axum::extract::ws::Message::Text(text.into()))
+                .await
+                .is_err()
+            {
+                break;
+            }
+        }
+    }
+}
+
+/// Rotate the service's capability signing key (admin only).
+pub async fn vee_admin_rotate_key(State(state): State<AppState>) -> JsonResponse<serde_json::Value> {
+    let mut issuer = state.capability_issuer.lock().await;
+    match issuer.rotate_key() {
+        Ok(()) => JsonResponse(serde_json::json!({
+            "success": true,
+            "data": { "rotated": true },
+        })),
+        Err(e) => JsonResponse(serde_json::json!({
+            "success": false,
+            "error": e,
+        })),
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

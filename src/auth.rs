@@ -134,6 +134,8 @@ pub fn required_scope_for_path(path: &str) -> Option<&'static str> {
         | "/vee/audit" | "/vee/checkpoints" => Some("read"),
         // Administrative ODIN control.
         "/vee/odin/health" | "/vee/odin/model" => Some("admin"),
+        // Capability signing-key rotation.
+        "/vee/admin/rotate-key" => Some("admin"),
         // Data lifecycle administration.
         "/admin/backup" | "/admin/restore" => Some("admin"),
         _ => Some("read"),

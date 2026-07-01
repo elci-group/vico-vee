@@ -1112,3 +1112,9 @@ async fn tmp_debug_shell_worker() {
     let result = worker.execute(&task).await;
     eprintln!("SHELL RESULT: {:?}", result);
 }
+
+#[test]
+fn tmp_serialize_status() {
+    let s = serde_json::to_string(&crate::types::ExecutionStatus::Completed).unwrap();
+    eprintln!("STATUS JSON: {}", s);
+}

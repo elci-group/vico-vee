@@ -137,6 +137,13 @@ pub async fn submit_code(
         "language": language,
         "source_code": code,
         "capabilities": ["process_spawn"],
+        "budget": {
+            "cpu_seconds": 30,
+            "memory_mb": 128,
+            "disk_mb": 100,
+            "token_budget": 1000,
+            "wall_clock_seconds": 30,
+        },
     });
     let mut req = client
         .post(&url)

@@ -1150,3 +1150,18 @@ async fn tmp_debug_shell_worker2() {
     let result = worker.execute(&task).await;
     eprintln!("SHELL RESULT: {:?}", result);
 }
+
+#[tokio::test]
+async fn tmp_debug_shell_worker3() {
+    use crate::capability::{CapabilityRegistry, GrantAuthority};
+    use crate::types::*;
+    use crate::worker::RuntimeWorker;
+    let mut registry = CapabilityRegistry::new_with_seed([93u8; 32]);
+    let execution_id = "shell-debug-3";
+    let grant = registry.grant(execution_id, Capability::ProcessSpawn, GrantAuthority::Orchestrator, None);
+    let mut worker = crate::worker::ShellWorker::new();
+    worker.init(execution_id, vec![grant], std::sync::Arc::new(registry.verifier()), vec![Capability::ProcessSpawn], ExecutionBudget { cpu_seconds: 5, memory_mb: 128, disk_mb: 10, token_budget: 10, wall_clock_seconds: 1 }).await.expect("init");
+    let task = ExecutionTask { execution_id: execution_id.into(), run_id: None, agent_id: "test".into(), language: ExecutionLanguage::Shell, source_code: "echo hello-shell-integration".into(), capabilities: vec![Capability::ProcessSpawn], capability_grants: vec![], budget: ExecutionBudget { cpu_seconds: 5, memory_mb: 128, disk_mb: 10, token_budget: 10, wall_clock_seconds: 1 }, hypothesis: None, provenance: Provenance::default(), project_id: None };
+    let result = worker.execute(&task).await;
+    eprintln!("SHELL RESULT: {:?}", result);
+}

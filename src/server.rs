@@ -578,7 +578,7 @@ async fn submit_osmosis_task(
     };
 
     let mut payload = serde_json::to_value(&operation).map_err(|e| e.to_string())?;
-    if let Some(root) = std::env::var("VICO_VEE_PROJECT_ROOT").ok() {
+    if let Ok(root) = std::env::var("VICO_VEE_PROJECT_ROOT") {
         if let Some(obj) = payload.as_object_mut() {
             obj.insert("project_root".to_string(), serde_json::Value::String(root));
         }

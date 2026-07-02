@@ -4,7 +4,11 @@
 //! reloader so long-lived deployments can rotate certificates without
 //! restarting the process.
 
-use axum::extract::ConnectInfo;
+use axum::{
+    extract::{ConnectInfo, Request, State},
+    middleware::{Next, from_fn_with_state},
+    response::Response,
+};
 use rustls::pki_types::CertificateDer;
 use rustls::ServerConfig;
 use std::future::Future;
@@ -12,7 +16,6 @@ use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use tokio_rustls::TlsAcceptor;
-use tower::ServiceExt;
 
 /// Paths to a TLS certificate chain and private key.
 #[derive(Debug, Clone)]
@@ -140,6 +143,20 @@ fn load_private_key(path: &Path) -> Result<rustls::pki_types::PrivateKeyDer<'sta
         .ok_or_else(|| format!("no private key found in {}", path.display()))
 }
 
+/// Middleware that injects `ConnectInfo<SocketAddr>` for a single TLS connection.
+///
+/// axum's built-in server sets this extension automatically for plain HTTP, but
+/// our custom HTTPS accept loop must attach it per-connection so that rate
+/// limiting and other IP-aware middleware work over TLS.
+async fn inject_connect_info(
+    State(peer_addr): State<SocketAddr>,
+    mut req: Request,
+    next: Next,
+) -> Response {
+    req.extensions_mut().insert(ConnectInfo(peer_addr));
+    next.run(req).await
+}
+
 /// Serve an axum `Router` over HTTPS using the provided TLS acceptor source.
 ///
 /// Accepts new TLS connections until `shutdown` resolves, then stops
@@ -173,10 +190,9 @@ pub async fn serve_https(
                                 .peer_addr()
                                 .unwrap_or(peer_addr);
                             let io = hyper_util::rt::TokioIo::new(stream);
-                            let svc = app.clone().map_request(move |mut req: axum::extract::Request| {
-                                req.extensions_mut().insert(ConnectInfo(peer_addr));
-                                req
-                            });
+                            let svc = app
+                                .clone()
+                                .layer(from_fn_with_state(peer_addr, inject_connect_info));
                             let svc = hyper_util::service::TowerToHyperService::new(svc);
                             let builder = hyper_util::server::conn::auto::Builder::new(
                                 hyper_util::rt::TokioExecutor::new(),

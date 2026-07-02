@@ -297,6 +297,40 @@ impl ExecutorDaemon {
         self.inner.handle.lock().await.is_some()
     }
 
+    /// Wait for all currently in-flight executions to finish, up to `timeout`.
+    ///
+    /// Returns `true` if all executions finished before the timeout, and
+    /// `false` if some were still running when the timeout elapsed.
+    pub async fn wait_for_inflight(&self, timeout: std::time::Duration) -> bool {
+        let deadline = tokio::time::Instant::now() + timeout;
+        loop {
+            let handles: Vec<_> = self
+                .inner
+                .inflight
+                .lock()
+                .await
+                .values()
+                .map(|(_, handle)| handle.clone())
+                .collect();
+            if handles.is_empty() {
+                return true;
+            }
+            let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+            if remaining.is_zero() {
+                return false;
+            }
+            let wait = tokio::time::timeout(remaining, futures::future::join_all(
+                handles.into_iter().map(|h| async move {
+                    let _ = h.await;
+                }),
+            ));
+            match wait.await {
+                Ok(()) => return true,
+                Err(_) => return false,
+            }
+        }
+    }
+
     /// Replace the capability verifier used for new executions.
     pub fn update_verifier(&self, verifier: CapabilityVerifier) {
         let mut guard = self

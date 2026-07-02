@@ -128,7 +128,10 @@ pub struct ApiKeysConfig {
     pub env_override: Option<String>,
 
     /// Require authentication even when no API keys are configured.
-    #[serde(default)]
+    ///
+    /// Defaults to `true` so that a missing keys file fails closed rather
+    /// than silently disabling auth.
+    #[serde(default = "default_require_auth")]
     pub require_auth: bool,
 }
 
@@ -137,9 +140,13 @@ impl Default for ApiKeysConfig {
         Self {
             file: default_api_keys_file(),
             env_override: None,
-            require_auth: false,
+            require_auth: default_require_auth(),
         }
     }
+}
+
+fn default_require_auth() -> bool {
+    true
 }
 
 fn default_port() -> u16 {
@@ -254,6 +261,15 @@ pub struct Cli {
     /// Path to the API-keys file.
     #[arg(long, env = "VICO_VEE_API_KEYS_FILE")]
     pub api_keys_file: Option<PathBuf>,
+
+    /// Require API-key authentication even when no keys file is present.
+    #[arg(long, env = "VICO_VEE_REQUIRE_AUTH")]
+    pub require_auth: Option<bool>,
+
+    /// Generate a fresh admin API key, write it to the given file, and exit.
+    /// If the path is omitted, the key is written to the configured api_keys_file.
+    #[arg(long, group = "lifecycle", value_name = "PATH")]
+    pub generate_admin_key: Option<Option<PathBuf>>,
 
     /// Maximum request body size in megabytes.
     #[arg(long, env = "VICO_VEE_BODY_LIMIT_MB")]
@@ -382,6 +398,11 @@ impl Config {
         }
         if let Ok(v) = std::env::var("VICO_VEE_API_KEYS") {
             self.api_keys.env_override = Some(v);
+        }
+        if let Ok(v) = std::env::var("VICO_VEE_REQUIRE_AUTH") {
+            self.api_keys.require_auth = v
+                .parse::<bool>()
+                .map_err(|e| format!("VICO_VEE_REQUIRE_AUTH: {e}"))?;
         }
         if let Ok(v) = std::env::var("VICO_VEE_BODY_LIMIT_MB") {
             self.body_limit_mb = v

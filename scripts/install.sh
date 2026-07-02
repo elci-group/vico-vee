@@ -67,8 +67,10 @@ if [[ ! -f "$KEYS_FILE" ]]; then
     API_KEY=$(openssl rand -hex 32 2>/dev/null || head -c 64 /dev/urandom | xxd -p | tr -d '\n')
     cat > "$KEYS_FILE" <<EOF
 # vico-vee API keys
-# Format: key = "scope1,scope2"
-"${API_KEY}" = "submit,read,admin"
+# Format: [keys.<name>] token = "..." scopes = ["submit", "read", "admin"]
+[keys.admin]
+token = "${API_KEY}"
+scopes = ["submit", "read", "admin"]
 EOF
     chmod 600 "$KEYS_FILE"
     chown "${USER_NAME}:${USER_NAME}" "$KEYS_FILE"

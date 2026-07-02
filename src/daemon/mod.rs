@@ -6,6 +6,7 @@
 //! workers are stored in the persistent ArtifactStore when possible.
 
 use crate::capability::{CapabilityRegistry, CapabilityVerifier};
+use crate::daemon::odin::OdinState;
 use crate::execution_store::ExecutionStore;
 use crate::pattern::PatternStore;
 use crate::types::*;
@@ -34,6 +35,7 @@ pub(crate) struct Inner {
     pub(crate) store: RwLock<HashMap<String, ExecutionResult>>,
     pub(crate) execution_store: Option<Arc<std::sync::Mutex<ExecutionStore>>>,
     pub(crate) pattern_store: Option<Arc<PatternStore>>,
+    pub(crate) odin_state: OdinState,
     pub(crate) verifier: std::sync::RwLock<CapabilityVerifier>,
     pub(crate) cancel: CancellationToken,
     pub(crate) handle: Mutex<Option<JoinHandle<()>>>,
@@ -72,7 +74,7 @@ impl ExecutorDaemon {
     /// Create a daemon using a deterministic in-memory capability verifier.
     pub fn try_new() -> Result<Self, String> {
         let registry = CapabilityRegistry::new_with_seed([0u8; 32]);
-        Self::try_new_with_stores(registry.verifier(), None, None)
+        Self::try_new_full(registry.verifier(), None, None, OdinState::default())
     }
 
     /// Create a daemon with an explicit capability verifier and optional
@@ -81,7 +83,7 @@ impl ExecutorDaemon {
         verifier: CapabilityVerifier,
         execution_store: Option<ExecutionStore>,
     ) -> Result<Self, String> {
-        Self::try_new_with_stores(verifier, execution_store, None)
+        Self::try_new_full(verifier, execution_store, None, OdinState::default())
     }
 
     /// Create a daemon with explicit verifier and optional persistent stores.
@@ -90,21 +92,32 @@ impl ExecutorDaemon {
         execution_store: Option<ExecutionStore>,
         pattern_store: Option<PatternStore>,
     ) -> Result<Self, String> {
+        Self::try_new_full(verifier, execution_store, pattern_store, OdinState::default())
+    }
+
+    /// Create a daemon with explicit verifier, stores, and ODIN state.
+    pub fn try_new_full(
+        verifier: CapabilityVerifier,
+        execution_store: Option<ExecutionStore>,
+        pattern_store: Option<PatternStore>,
+        odin_state: OdinState,
+    ) -> Result<Self, String> {
         let execution_store = execution_store.map(|s| Arc::new(std::sync::Mutex::new(s)));
         let pattern_store = pattern_store.map(Arc::new);
-        Ok(Self::with_stores(verifier, execution_store, pattern_store))
+        Ok(Self::with_full(verifier, execution_store, pattern_store, odin_state))
     }
 
     /// Synchronous constructor for callers that do not need async setup.
     pub fn new() -> Self {
         let registry = CapabilityRegistry::new_with_seed([0u8; 32]);
-        Self::with_stores(registry.verifier(), None, None)
+        Self::with_full(registry.verifier(), None, None, OdinState::default())
     }
 
-    fn with_stores(
+    fn with_full(
         verifier: CapabilityVerifier,
         execution_store: Option<Arc<std::sync::Mutex<ExecutionStore>>>,
         pattern_store: Option<Arc<PatternStore>>,
+        odin_state: OdinState,
     ) -> Self {
         let (event_tx, _event_rx) = broadcast::channel(128);
         Self {
@@ -112,6 +125,7 @@ impl ExecutorDaemon {
                 store: RwLock::new(HashMap::new()),
                 execution_store,
                 pattern_store,
+                odin_state,
                 verifier: std::sync::RwLock::new(verifier),
                 cancel: CancellationToken::new(),
                 handle: Mutex::new(None),

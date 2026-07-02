@@ -120,8 +120,12 @@ impl AppState {
             .unwrap_or_else(|| config.data_dir.join("vee_patterns.db"));
         let pattern_store =
             crate::pattern::PatternStore::new_with_path(&patterns_db).ok();
+        let odin_client =
+            crate::daemon::odin::OdinClient::new(config.ollama_url.clone());
+        let odin_state =
+            crate::daemon::odin::OdinState::new(Some(odin_client));
         let vee = Arc::new(
-            ExecutorDaemon::try_new_with_stores(verifier, execution_store, pattern_store)
+            ExecutorDaemon::try_new_full(verifier, execution_store, pattern_store, odin_state)
                 .map_err(|e| format!("executor daemon: {}", e))?,
         );
         vee.restore_executions().await.map_err(|e| format!("restore executions: {e}"))?;
@@ -476,11 +480,13 @@ pub async fn vee_checkpoints(State(state): State<AppState>) -> JsonResponse<serd
 pub async fn vee_odin_health(State(state): State<AppState>) -> JsonResponse<serde_json::Value> {
     let healthy = state.vee.odin_health().await;
     let models = state.vee.odin_models().await;
+    let active_model = state.vee.odin_active_model().await;
     JsonResponse(serde_json::json!({
         "success": true,
         "data": {
             "healthy": healthy,
             "models": models,
+            "active_model": active_model,
         }
     }))
 }

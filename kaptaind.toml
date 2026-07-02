@@ -17,9 +17,10 @@ d = 0.20
 r = 0.15
 
 [push]
-enabled = true
+# kaptaind lives inside the vico-desktop repo, so we do not let it push the
+# parent repo. The vico-vee subtree is pushed to its public repo separately.
+enabled = false
 branch = "main"
-# remote = "origin"  # set automatically from git remote
 
 [ratelimit]
 min_commit_interval = 10

@@ -131,6 +131,25 @@ impl ExecutorDaemon {
         format!("{}/{}", project, execution_id)
     }
 
+    /// Persist the current state of an execution to disk, if persistence is
+    /// enabled. Errors are logged but do not fail the request.
+    pub(crate) async fn persist_result(
+        &self,
+        project_id: Option<&str>,
+        execution_id: &str,
+    ) {
+        if let Some(store) = &self.execution_store {
+            let key = Self::project_key(project_id, execution_id);
+            let maybe_result = self.store.read().await.get(&key).cloned();
+            if let Some(result) = maybe_result {
+                let project = project_id.unwrap_or(crate::tenant::DEFAULT_PROJECT);
+                if let Err(e) = store.save(project, &result) {
+                    tracing::warn!(execution_id, error = %e, "failed to persist execution result");
+                }
+            }
+        }
+    }
+
     /// Submit a task for execution after verifying its capability grants.
     pub async fn submit(&self, task: ExecutionTask) -> Result<String, String> {
         let verifier = self
@@ -150,8 +169,10 @@ impl ExecutorDaemon {
         let project_id = task.project_id.clone().unwrap_or_else(|| crate::tenant::DEFAULT_PROJECT.to_string());
         let store_key = Self::project_key(Some(&project_id), &task.execution_id);
 
+        let project_id = task.project_id.clone().unwrap_or_else(|| crate::tenant::DEFAULT_PROJECT.to_string());
         let result = ExecutionResult {
             execution_id: task.execution_id.clone(),
+            project_id: Some(project_id.clone()),
             status: ExecutionStatus::Queued,
             phase: ExecutionPhase::Hypothesis,
             artifacts: vec![],
@@ -171,7 +192,10 @@ impl ExecutorDaemon {
             .store
             .write()
             .await
-            .insert(store_key, result);
+            .insert(store_key.clone(), result);
+        self.inner
+            .persist_result(Some(&project_id), &task.execution_id)
+            .await;
 
         // Spawn a background worker for this execution and track it so it can
         // be cancelled.

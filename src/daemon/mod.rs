@@ -98,6 +98,11 @@ impl ExecutorDaemon {
         }
     }
 
+    fn project_key(project_id: Option<&str>, execution_id: &str) -> String {
+        let project = project_id.unwrap_or(crate::tenant::DEFAULT_PROJECT);
+        format!("{}/{}", project, execution_id)
+    }
+
     /// Submit a task for execution after verifying its capability grants.
     pub async fn submit(&self, task: ExecutionTask) -> Result<String, String> {
         let verifier = self
@@ -113,6 +118,9 @@ impl ExecutorDaemon {
         ) {
             return Err(format!("missing or invalid capability grant: {}", e));
         }
+
+        let project_id = task.project_id.clone().unwrap_or_else(|| crate::tenant::DEFAULT_PROJECT.to_string());
+        let store_key = Self::project_key(Some(&project_id), &task.execution_id);
 
         let result = ExecutionResult {
             execution_id: task.execution_id.clone(),
@@ -135,7 +143,7 @@ impl ExecutorDaemon {
             .store
             .write()
             .await
-            .insert(task.execution_id.clone(), result);
+            .insert(store_key, result);
 
         // Spawn a background worker for this execution and track it so it can
         // be cancelled.
@@ -157,20 +165,30 @@ impl ExecutorDaemon {
     }
 
     /// Return the current execution result for an execution id, if any.
-    pub async fn get_status(&self, execution_id: &str) -> Option<ExecutionResult> {
-        self.inner.store.read().await.get(execution_id).cloned()
+    pub async fn get_status(
+        &self,
+        execution_id: &str,
+        project_id: Option<&str>,
+    ) -> Option<ExecutionResult> {
+        let key = Self::project_key(project_id, execution_id);
+        self.inner.store.read().await.get(&key).cloned()
     }
 
     /// Cancel an execution, aborting its worker if it is still in flight and
     /// marking it as `Cancelled`.
-    pub async fn cancel(&self, execution_id: &str) -> Result<(), String> {
+    pub async fn cancel(
+        &self,
+        execution_id: &str,
+        project_id: Option<&str>,
+    ) -> Result<(), String> {
         if let Some((token, handle)) = self.inner.inflight.lock().await.remove(execution_id) {
             token.cancel();
             handle.abort();
         }
 
         let mut store = self.inner.store.write().await;
-        match store.get_mut(execution_id) {
+        let key = Self::project_key(project_id, execution_id);
+        match store.get_mut(&key) {
             Some(result) => {
                 result.status = ExecutionStatus::Cancelled;
                 result.completed_at = Some(Utc::now());
@@ -180,13 +198,24 @@ impl ExecutorDaemon {
         }
     }
 
-    /// List execution results, optionally filtered by status.
-    pub async fn list(&self, filter: Option<ExecutionStatus>) -> Vec<ExecutionResult> {
+    /// List execution results, optionally filtered by status and project.
+    pub async fn list(
+        &self,
+        filter: Option<ExecutionStatus>,
+        project_id: Option<&str>,
+    ) -> Vec<ExecutionResult> {
+        let project = project_id.unwrap_or(crate::tenant::DEFAULT_PROJECT).to_string();
+        let prefix = format!("{}/", project);
         self.inner
             .store
             .read()
             .await
             .values()
+            .filter(|r| r.execution_id.starts_with(&prefix) || {
+                // Prefer prefix matching on the composite store key.
+                let key = Self::project_key(project_id, &r.execution_id);
+                self.inner.store.read().await.contains_key(&key)
+            })
             .filter(|r| filter.as_ref().is_none_or(|f| r.status == *f))
             .cloned()
             .collect()

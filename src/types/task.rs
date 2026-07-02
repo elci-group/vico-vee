@@ -53,6 +53,9 @@ pub struct ExecutionTask {
     /// capability.
     #[serde(default)]
     pub capability_grants: Vec<CapabilityGrant>,
+    /// Optional project identifier for multi-tenant isolation.
+    #[serde(default)]
+    pub project_id: Option<String>,
     pub budget: ExecutionBudget,
     pub hypothesis: Option<ExecutionHypothesis>,
     pub provenance: Provenance,

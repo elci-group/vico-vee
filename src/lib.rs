@@ -11,11 +11,11 @@
 
 pub mod artifact;
 pub mod audit;
+pub mod auth;
 pub mod capability;
 pub mod checkpoint;
 pub mod config;
 pub mod daemon;
-pub mod auth;
 pub mod migrations;
 pub mod openapi;
 pub mod osmosis;

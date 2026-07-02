@@ -251,7 +251,11 @@ impl ExecutorDaemon {
 
     /// Replace the capability verifier used for new executions.
     pub fn update_verifier(&self, verifier: CapabilityVerifier) {
-        let mut guard = self.inner.verifier.write().unwrap_or_else(|e| e.into_inner());
+        let mut guard = self
+            .inner
+            .verifier
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
         *guard = verifier;
     }
 }

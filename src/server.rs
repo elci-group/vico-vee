@@ -46,7 +46,7 @@ impl AppState {
 
         let vee = Arc::new(ExecutorDaemon::new());
         let capability_issuer = Arc::new(Mutex::new(CapabilityRegistry::new_with_seed([0u8; 32])));
-        let auth_keys = crate::auth::AuthKeys::default();
+        let auth_keys = crate::auth::AuthKeys::from_map(std::collections::HashMap::new(), false);
         Self {
             vee,
             capability_issuer,

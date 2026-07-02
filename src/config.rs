@@ -65,10 +65,6 @@ pub struct Config {
     pub request_timeout_secs: u64,
 
     /// Rate limit: requests per second per IP.
-    #[serde(default)]
-    pub rate_limit: RateLimitConfig,
-
-    /// Rate limit: requests per second per IP.
     #[serde(default = "default_rate_limit_per_sec")]
     pub rate_limit_per_sec: u32,
 
@@ -85,6 +81,33 @@ pub enum LogFormat {
     Pretty,
     Json,
     Compact,
+}
+
+/// API-key authentication configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiKeysConfig {
+    /// Path to the TOML file containing API keys.
+    #[serde(default = "default_api_keys_file")]
+    pub file: PathBuf,
+
+    /// Optional inline API keys configuration supplied via the
+    /// `VICO_VEE_API_KEYS` environment variable.
+    #[serde(default)]
+    pub env_override: Option<String>,
+
+    /// Require authentication even when no API keys are configured.
+    #[serde(default)]
+    pub require_auth: bool,
+}
+
+impl Default for ApiKeysConfig {
+    fn default() -> Self {
+        Self {
+            file: default_api_keys_file(),
+            env_override: std::env::var("VICO_VEE_API_KEYS").ok(),
+            require_auth: false,
+        }
+    }
 }
 
 fn default_port() -> u16 {

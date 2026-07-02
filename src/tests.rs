@@ -484,6 +484,7 @@ async fn test_daemon_cancel_queued_execution() {
         source_code: "print('hello')".into(),
         capabilities: vec![Capability::ProcessSpawn],
         capability_grants: vec![grant],
+        project_id: None,
         budget: ExecutionBudget {
             cpu_seconds: 1,
             memory_mb: 64,
@@ -712,6 +713,7 @@ async fn test_daemon_rejects_capabilities_without_grants() {
         source_code: "print('hello')".into(),
         capabilities: vec![Capability::ProcessSpawn],
         capability_grants: vec![],
+        project_id: None,
         budget: ExecutionBudget {
             cpu_seconds: 1,
             memory_mb: 64,
@@ -820,6 +822,7 @@ async fn test_worker_accepts_valid_grant_and_executes() {
         source_code: "print('ok')".into(),
         capabilities: vec![Capability::ProcessSpawn],
         capability_grants: vec![],
+        project_id: None,
         budget: ExecutionBudget {
             cpu_seconds: 1,
             memory_mb: 64,
@@ -860,6 +863,7 @@ async fn test_daemon_submit_python_task_completes_with_stdout_artifact() {
         source_code: "print('hello from vee')".into(),
         capabilities: vec![Capability::ProcessSpawn],
         capability_grants: vec![grant],
+        project_id: None,
         budget: ExecutionBudget {
             cpu_seconds: 5,
             memory_mb: 128,
@@ -932,6 +936,7 @@ async fn test_daemon_submit_then_cancel_marks_cancelled() {
         source_code: "import time; time.sleep(10)".into(),
         capabilities: vec![Capability::ProcessSpawn],
         capability_grants: vec![grant],
+        project_id: None,
         budget: ExecutionBudget {
             cpu_seconds: 15,
             memory_mb: 128,
@@ -973,6 +978,7 @@ async fn test_daemon_submit_without_grant_rejects() {
         source_code: "print('hello')".into(),
         capabilities: vec![Capability::ProcessSpawn],
         capability_grants: vec![],
+        project_id: None,
         budget: ExecutionBudget::default(),
         hypothesis: None,
         provenance: Provenance::default(),

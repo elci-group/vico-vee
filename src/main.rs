@@ -66,13 +66,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let state = vico_vee::server::AppState::try_new(config.clone()).await?;
+    let shutdown_state = state.clone();
 
     let app = vico_vee::server::router(state);
     let listener = tokio::net::TcpListener::bind((config.bind.as_str(), config.port)).await?;
 
-    let shutdown = async move {
-        let _ = tokio::signal::ctrl_c().await;
-    };
+    let shutdown = shutdown_signal();
 
     if let (Some(cert_path), Some(key_path)) = (&config.tls_cert, &config.tls_key) {
         tracing::info!(
@@ -93,7 +92,39 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .await?;
     }
 
+    // Stop accepting new requests and wait for in-flight executions to finish.
+    tracing::info!(
+        grace_period = config.shutdown_grace_period_secs,
+        "graceful shutdown initiated"
+    );
+    let timeout = std::time::Duration::from_secs(config.shutdown_grace_period_secs);
+    if !shutdown_state.vee.wait_for_inflight(timeout).await {
+        tracing::warn!("shutdown grace period expired with in-flight executions remaining");
+    }
+    shutdown_state.vee.stop().await;
+    tracing::info!("vico-vee shutdown complete");
+
     Ok(())
+}
+
+/// Wait for SIGINT (Ctrl-C) or SIGTERM, whichever arrives first.
+async fn shutdown_signal() {
+    #[cfg(unix)]
+    {
+        let mut sigint = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())
+            .expect("failed to install SIGINT handler");
+        let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("failed to install SIGTERM handler");
+        tokio::select! {
+            _ = sigint.recv() => tracing::info!("received SIGINT, shutting down"),
+            _ = sigterm.recv() => tracing::info!("received SIGTERM, shutting down"),
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = tokio::signal::ctrl_c().await;
+        tracing::info!("received Ctrl-C, shutting down");
+    }
 }
 
 /// Generate a fresh admin API key and write it to `path` in the TOML format

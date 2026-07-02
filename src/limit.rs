@@ -16,13 +16,14 @@ use axum::{
 };
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 /// Token-bucket rate limiter.
+#[derive(Clone)]
 pub struct RateLimiter {
-    per_ip: Mutex<HashMap<String, Bucket>>,
-    per_agent: Mutex<HashMap<String, Bucket>>,
+    per_ip: Arc<Mutex<HashMap<String, Bucket>>>,
+    per_agent: Arc<Mutex<HashMap<String, Bucket>>>,
     ip_rate: f64,
     ip_burst: f64,
     agent_rate: f64,
@@ -52,8 +53,8 @@ impl RateLimiter {
     /// Build a limiter from the service configuration.
     pub fn new(config: crate::config::RateLimitConfig) -> Self {
         Self {
-            per_ip: Mutex::new(HashMap::new()),
-            per_agent: Mutex::new(HashMap::new()),
+            per_ip: Arc::new(Mutex::new(HashMap::new())),
+            per_agent: Arc::new(Mutex::new(HashMap::new())),
             ip_rate: config.per_sec.max(1) as f64,
             ip_burst: config.burst.max(1) as f64,
             agent_rate: config.exec_per_sec.max(1) as f64,

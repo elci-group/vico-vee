@@ -366,10 +366,9 @@ pub async fn vee_artifacts(
 
 pub async fn vee_dashboard(
     State(state): State<AppState>,
-    project: Option<crate::tenant::ProjectContext>,
+    project: crate::tenant::ProjectContext,
 ) -> JsonResponse<serde_json::Value> {
-    let project_id = project.as_ref().map(|p| p.project_id.as_str());
-    let stats = state.vee.dashboard_stats(project_id).await;
+    let stats = state.vee.dashboard_stats(Some(&project.project_id)).await;
     JsonResponse(serde_json::json!({ "success": true, "data": stats }))
 }
 

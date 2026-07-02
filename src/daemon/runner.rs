@@ -40,7 +40,7 @@ pub(crate) async fn run_execution(
     );
 
     if token.is_cancelled() {
-        mark_cancelled(&inner, &execution_id).await;
+        mark_cancelled(&inner, &store_key).await;
         inner.inflight.lock().await.remove(&execution_id);
         return;
     }
@@ -64,13 +64,13 @@ pub(crate) async fn run_execution(
         )
         .await
     {
-        mark_failed(&inner, &execution_id, format!("worker init failed: {}", e)).await;
+        mark_failed(&inner, &store_key, format!("worker init failed: {}", e)).await;
         inner.inflight.lock().await.remove(&execution_id);
         return;
     }
 
     if token.is_cancelled() {
-        mark_cancelled(&inner, &execution_id).await;
+        mark_cancelled(&inner, &store_key).await;
         inner.inflight.lock().await.remove(&execution_id);
         return;
     }
@@ -80,7 +80,7 @@ pub(crate) async fn run_execution(
     let result = tokio::select! {
         biased;
         _ = token.cancelled() => {
-            mark_cancelled(&inner, &execution_id).await;
+            mark_cancelled(&inner, &store_key).await;
             inner.inflight.lock().await.remove(&execution_id);
             return;
         }
@@ -125,7 +125,7 @@ pub(crate) async fn run_execution(
 
             {
                 let mut store = inner.store.write().await;
-                if let Some(result) = store.get_mut(&execution_id) {
+                if let Some(result) = store.get_mut(&store_key) {
                     result.status = ExecutionStatus::Completed;
                     result.phase = ExecutionPhase::Validation;
                     result.artifacts = stored_artifacts;

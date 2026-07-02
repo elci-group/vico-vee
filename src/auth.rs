@@ -12,6 +12,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 
 /// A single API key entry as stored in `api_keys.toml`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -269,5 +270,40 @@ mod tests {
         assert_eq!(required_scope_for_path("/vee/submit"), Some("submit"));
         assert_eq!(required_scope_for_path("/vee/dashboard"), Some("read"));
         assert_eq!(required_scope_for_path("/vee/odin/model"), Some("admin"));
+    }
+
+    #[test]
+    fn load_fails_closed_when_auth_required_and_no_keys() {
+        let config = crate::config::ApiKeysConfig {
+            file: PathBuf::from("/does/not/exist/api_keys.toml"),
+            env_override: None,
+            require_auth: true,
+        };
+        assert!(AuthKeys::load(&config).is_err());
+    }
+
+    #[test]
+    fn load_allows_no_keys_when_auth_not_required() {
+        let config = crate::config::ApiKeysConfig {
+            file: PathBuf::from("/does/not/exist/api_keys.toml"),
+            env_override: None,
+            require_auth: false,
+        };
+        let keys = AuthKeys::load(&config).unwrap();
+        assert!(!keys.require_auth);
+        assert!(keys.keys.is_empty());
+    }
+
+    #[test]
+    fn load_fails_when_keys_file_is_empty_and_auth_required() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("api_keys.toml");
+        std::fs::write(&path, "[keys]\n").unwrap();
+        let config = crate::config::ApiKeysConfig {
+            file: path,
+            env_override: None,
+            require_auth: true,
+        };
+        assert!(AuthKeys::load(&config).is_err());
     }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "vico-vee"
-version = "0.1.4"
+version = "0.1.5"
 description = "ViCo Execution Environment — standalone sandboxed execution service"
 authors = ["ViCo Systems"]
 license = "MIT"

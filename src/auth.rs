@@ -12,6 +12,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+#[cfg(test)]
 use std::path::PathBuf;
 
 /// A single API key entry as stored in `api_keys.toml`.

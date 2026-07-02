@@ -26,6 +26,12 @@ chrono = { version = "0.4", features = ["serde"] }
 rusqlite = { version = "0.34", features = ["bundled", "chrono"] }
 clap = { version = "4", features = ["derive", "env"] }
 blake3 = "1.5"
+flate2 = "1"
+tar = "0.4"
+rustls = "0.23"
+rustls-pemfile = "2"
+tokio-rustls = "0.26"
+hyper-util = { version = "0.1", features = ["server", "tokio"] }
 lru = "0.16.3"
 ed25519-dalek = { version = "2.1", features = ["rand_core"] }
 jsonwebtoken = "9"
@@ -56,6 +62,15 @@ keyring = { version = "3", features = ["windows-native"] }
 
 [dev-dependencies]
 tokio-test = "0.4"
+flate2 = "1"
+tar = "0.4"
+rand = "0.9"
+futures = "0.3"
+criterion = { version = "0.5", features = ["async_tokio"] }
+
+[[bench]]
+name = "throughput"
+harness = false
 
 [[bin]]
 name = "vico-vee"

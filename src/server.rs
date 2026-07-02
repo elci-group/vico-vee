@@ -16,6 +16,8 @@ use tokio::sync::Mutex;
 
 use crate::{
     capability::CapabilityRegistry,
+    health::MetricsRegistry,
+    limit::RateLimiter,
     openapi::{docs, openapi_json},
     types::{
         Capability, ExecutionLanguage, ExecutionTask, OsmosisArtifactRef, OsmosisDiffRequest,
@@ -34,6 +36,8 @@ pub struct AppState {
     pub capability_issuer: Arc<Mutex<CapabilityRegistry>>,
     pub auth_keys: crate::auth::AuthKeys,
     pub config: Config,
+    pub metrics: MetricsRegistry,
+    pub rate_limiter: RateLimiter,
 }
 
 impl AppState {
@@ -47,11 +51,15 @@ impl AppState {
         let vee = Arc::new(ExecutorDaemon::new());
         let capability_issuer = Arc::new(Mutex::new(CapabilityRegistry::new_with_seed([0u8; 32])));
         let auth_keys = crate::auth::AuthKeys::from_map(std::collections::HashMap::new(), false);
+        let metrics = MetricsRegistry::default();
+        let rate_limiter = RateLimiter::new(config.rate_limit.clone());
         Self {
             vee,
             capability_issuer,
             auth_keys,
             config,
+            metrics,
+            rate_limiter,
         }
     }
 
@@ -85,12 +93,16 @@ impl AppState {
 
         let auth_keys = crate::auth::AuthKeys::load(&config.api_keys)
             .map_err(|e| format!("auth keys: {}", e))?;
+        let metrics = MetricsRegistry::default();
+        let rate_limiter = RateLimiter::new(config.rate_limit.clone());
 
         Ok(Self {
             vee,
             capability_issuer,
             auth_keys,
             config,
+            metrics,
+            rate_limiter,
         })
     }
 }
@@ -98,8 +110,12 @@ impl AppState {
 /// All HTTP routes registered by the vico-vee router, used by OpenAPI tests.
 pub const ROUTES: &[&str] = &[
     "/health",
+    "/ready",
+    "/metrics",
     "/openapi.json",
     "/docs",
+    "/admin/backup",
+    "/admin/restore",
     "/vee/submit",
     "/vee/status",
     "/vee/cancel",
@@ -120,9 +136,13 @@ pub const ROUTES: &[&str] = &[
 
 pub fn router(state: AppState) -> Router {
     Router::new()
-        .route("/health", post(health))
+        .route("/health", get(crate::health::health))
+        .route("/ready", get(crate::health::ready))
+        .route("/metrics", get(crate::health::metrics))
         .route("/openapi.json", get(openapi_json))
         .route("/docs", get(docs))
+        .route("/admin/backup", post(crate::backup::admin_backup))
+        .route("/admin/restore", post(crate::backup::admin_restore))
         .route("/vee/submit", post(vee_submit))
         .route("/vee/status", post(vee_status))
         .route("/vee/cancel", post(vee_cancel))
@@ -143,6 +163,15 @@ pub fn router(state: AppState) -> Router {
             state.clone(),
             crate::auth::auth_middleware,
         ))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            crate::limit::agent_rate_limit_middleware,
+        ))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            crate::limit::ip_rate_limit_middleware,
+        ))
+        .layer(middleware::from_fn(crate::health::set_request_id))
         .with_state(state)
 }
 

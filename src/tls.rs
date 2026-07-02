@@ -6,7 +6,7 @@
 
 use axum::{
     extract::{ConnectInfo, Request, State},
-    middleware::{Next, from_fn_with_state},
+    middleware::{from_fn_with_state, Next},
     response::Response,
 };
 use rustls::pki_types::CertificateDer;

@@ -77,7 +77,9 @@ impl PatternStore {
     /// Store a new pattern (or update an existing one).
     pub fn store(&self, pattern: ExecutionPattern) {
         let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        inner.patterns.insert(pattern.pattern_id.clone(), pattern.clone());
+        inner
+            .patterns
+            .insert(pattern.pattern_id.clone(), pattern.clone());
         if let Some(db) = &inner.db {
             let data = serde_json::to_string(&pattern).unwrap_or_default();
             if let Err(e) = db.execute(

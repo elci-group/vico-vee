@@ -46,16 +46,14 @@ pub(crate) struct Inner {
 impl Inner {
     /// Persist the current state of an execution to disk, if persistence is
     /// enabled. Errors are logged but do not fail the request.
-    pub(crate) async fn persist_result(
-        &self,
-        project_id: Option<&str>,
-        execution_id: &str,
-    ) {
+    pub(crate) async fn persist_result(&self, project_id: Option<&str>, execution_id: &str) {
         if let Some(store) = &self.execution_store {
             let key = ExecutorDaemon::project_key(project_id, execution_id);
             let maybe_result = self.store.read().await.get(&key).cloned();
             if let Some(result) = maybe_result {
-                let project = project_id.unwrap_or(crate::tenant::DEFAULT_PROJECT).to_string();
+                let project = project_id
+                    .unwrap_or(crate::tenant::DEFAULT_PROJECT)
+                    .to_string();
                 let store = store.clone();
                 let execution_id = execution_id.to_string();
                 let _ = tokio::task::spawn_blocking(move || {
@@ -92,7 +90,12 @@ impl ExecutorDaemon {
         execution_store: Option<ExecutionStore>,
         pattern_store: Option<PatternStore>,
     ) -> Result<Self, String> {
-        Self::try_new_full(verifier, execution_store, pattern_store, OdinState::default())
+        Self::try_new_full(
+            verifier,
+            execution_store,
+            pattern_store,
+            OdinState::default(),
+        )
     }
 
     /// Create a daemon with explicit verifier, stores, and ODIN state.
@@ -104,7 +107,12 @@ impl ExecutorDaemon {
     ) -> Result<Self, String> {
         let execution_store = execution_store.map(|s| Arc::new(std::sync::Mutex::new(s)));
         let pattern_store = pattern_store.map(Arc::new);
-        Ok(Self::with_full(verifier, execution_store, pattern_store, odin_state))
+        Ok(Self::with_full(
+            verifier,
+            execution_store,
+            pattern_store,
+            odin_state,
+        ))
     }
 
     /// Synchronous constructor for callers that do not need async setup.
@@ -205,7 +213,10 @@ impl ExecutorDaemon {
             return Err(format!("missing or invalid capability grant: {}", e));
         }
 
-        let project_id = task.project_id.clone().unwrap_or_else(|| crate::tenant::DEFAULT_PROJECT.to_string());
+        let project_id = task
+            .project_id
+            .clone()
+            .unwrap_or_else(|| crate::tenant::DEFAULT_PROJECT.to_string());
         let store_key = Self::project_key(Some(&project_id), &task.execution_id);
 
         let result = ExecutionResult {
@@ -266,11 +277,7 @@ impl ExecutorDaemon {
 
     /// Cancel an execution, aborting its worker if it is still in flight and
     /// marking it as `Cancelled`.
-    pub async fn cancel(
-        &self,
-        execution_id: &str,
-        project_id: Option<&str>,
-    ) -> Result<(), String> {
+    pub async fn cancel(&self, execution_id: &str, project_id: Option<&str>) -> Result<(), String> {
         if let Some((token, handle)) = self.inner.inflight.lock().await.remove(execution_id) {
             token.cancel();
             handle.abort();
@@ -283,9 +290,7 @@ impl ExecutorDaemon {
                 result.status = ExecutionStatus::Cancelled;
                 result.completed_at = Some(Utc::now());
                 drop(store);
-                self.inner
-                    .persist_result(project_id, execution_id)
-                    .await;
+                self.inner.persist_result(project_id, execution_id).await;
                 Ok(())
             }
             None => Err(format!("execution '{}' not found", execution_id)),
@@ -298,7 +303,9 @@ impl ExecutorDaemon {
         filter: Option<ExecutionStatus>,
         project_id: Option<&str>,
     ) -> Vec<ExecutionResult> {
-        let project = project_id.unwrap_or(crate::tenant::DEFAULT_PROJECT).to_string();
+        let project = project_id
+            .unwrap_or(crate::tenant::DEFAULT_PROJECT)
+            .to_string();
         let prefix = format!("{}/", project);
         self.inner
             .store
@@ -336,7 +343,9 @@ impl ExecutorDaemon {
     /// Return lightweight dashboard statistics, optionally scoped to a project.
     pub async fn dashboard_stats(&self, project_id: Option<&str>) -> serde_json::Value {
         let store = self.inner.store.read().await;
-        let project = project_id.unwrap_or(crate::tenant::DEFAULT_PROJECT).to_string();
+        let project = project_id
+            .unwrap_or(crate::tenant::DEFAULT_PROJECT)
+            .to_string();
         let prefix = format!("{}/", project);
         let values: Vec<_> = store
             .iter()

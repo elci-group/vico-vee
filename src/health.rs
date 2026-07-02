@@ -86,12 +86,7 @@ impl MetricsRegistry {
     }
 
     /// Increment a counter by `value` with the supplied labels.
-    pub fn counter_inc_with_labels(
-        &self,
-        name: &str,
-        labels: &[(&str, &str)],
-        value: u64,
-    ) {
+    pub fn counter_inc_with_labels(&self, name: &str, labels: &[(&str, &str)], value: u64) {
         let mut inner = self.inner.lock().unwrap();
         let labels = labels_to_map(labels);
         *inner
@@ -158,11 +153,7 @@ impl MetricsRegistry {
                 let label_str = format_labels(labels);
                 for (bucket, count) in hist.buckets.iter().zip(hist.counts.iter()) {
                     let bucket_label = format_labels_with_extra(labels, "le", &bucket.to_string());
-                    writeln!(
-                        out,
-                        "{name}_bucket{bucket_label} {count}",
-                    )
-                    .unwrap();
+                    writeln!(out, "{name}_bucket{bucket_label} {count}",).unwrap();
                 }
                 writeln!(out, "{name}_sum{label_str} {}", hist.sum).unwrap();
                 writeln!(out, "{name}_count{label_str} {}", hist.count).unwrap();
@@ -216,7 +207,10 @@ fn format_labels_with_extra(labels: &Labels, key: &str, value: &str) -> String {
 }
 
 fn escape_label_value(value: &str) -> String {
-    value.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n")
+    value
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
 }
 
 /// `GET /health` — always returns a lightweight success response.

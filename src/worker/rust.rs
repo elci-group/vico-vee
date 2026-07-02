@@ -233,7 +233,10 @@ impl RuntimeWorker for RustWorker {
             Err(_) => {
                 return Err(ExecutionError {
                     code: "TIMEOUT".into(),
-                    message: format!("Rust execution exceeded {}s", self.budget.wall_clock_seconds),
+                    message: format!(
+                        "Rust execution exceeded {}s",
+                        self.budget.wall_clock_seconds
+                    ),
                     recoverable: true,
                     recovery_hint: Some("Increase wall_clock_seconds budget".into()),
                 })

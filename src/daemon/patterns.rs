@@ -17,11 +17,9 @@ impl ExecutorDaemon {
         if let Some(store) = &self.inner.pattern_store {
             let store = store.clone();
             let signature = signature.clone();
-            let patterns = tokio::task::spawn_blocking(move || {
-                store.find_matches(&signature, 0.5)
-            })
-            .await
-            .unwrap_or_default();
+            let patterns = tokio::task::spawn_blocking(move || store.find_matches(&signature, 0.5))
+                .await
+                .unwrap_or_default();
             patterns
                 .into_iter()
                 .map(|p| PatternRecord {

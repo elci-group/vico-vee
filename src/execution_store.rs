@@ -62,9 +62,7 @@ impl ExecutionStore {
             )
             .optional()
             .map_err(|e| format!("load execution: {e}"))?
-            .map(|json| {
-                serde_json::from_str(&json).map_err(|e| format!("deserialize result: {e}"))
-            })
+            .map(|json| serde_json::from_str(&json).map_err(|e| format!("deserialize result: {e}")))
             .transpose()
     }
 

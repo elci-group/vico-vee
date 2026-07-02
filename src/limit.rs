@@ -122,7 +122,11 @@ impl RateLimiter {
         let trusted = peer_ip.map(|ip| self.is_trusted_proxy(ip)).unwrap_or(false);
 
         if trusted {
-            if let Some(value) = req.headers().get("x-forwarded-for").and_then(|v| v.to_str().ok()) {
+            if let Some(value) = req
+                .headers()
+                .get("x-forwarded-for")
+                .and_then(|v| v.to_str().ok())
+            {
                 // The rightmost untrusted address is the closest client.
                 for part in value.split(',').rev().map(str::trim) {
                     if let Ok(ip) = part.parse::<IpAddr>() {
@@ -134,7 +138,9 @@ impl RateLimiter {
             }
         }
 
-        peer_ip.map(|ip| ip.to_string()).unwrap_or_else(|| "127.0.0.1".to_string())
+        peer_ip
+            .map(|ip| ip.to_string())
+            .unwrap_or_else(|| "127.0.0.1".to_string())
     }
 
     fn is_trusted_proxy(&self, ip: IpAddr) -> bool {
@@ -143,10 +149,7 @@ impl RateLimiter {
 }
 
 fn parse_cidrs(cidrs: &[String]) -> Vec<ipnet::IpNet> {
-    cidrs
-        .iter()
-        .filter_map(|s| s.parse().ok())
-        .collect()
+    cidrs.iter().filter_map(|s| s.parse().ok()).collect()
 }
 
 fn add_retry_after(mut resp: Response, retry_after: Duration) -> Response {
@@ -217,7 +220,12 @@ pub async fn agent_rate_limit_middleware(
         .get("x-vee-project")
         .and_then(|v| v.to_str().ok())
         .map(String::from)
-        .or_else(|| body_json.get("project_id").and_then(|v| v.as_str()).map(String::from))
+        .or_else(|| {
+            body_json
+                .get("project_id")
+                .and_then(|v| v.as_str())
+                .map(String::from)
+        })
         .unwrap_or_else(|| crate::tenant::DEFAULT_PROJECT.to_string());
 
     if let Err(retry_after) = state.rate_limiter.check_project(&project_id) {

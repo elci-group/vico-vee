@@ -119,9 +119,13 @@ pub fn create_worker(
         ExecutionLanguage::Rust => Ok(Box::new(super::rust::RustWorker::new())),
         ExecutionLanguage::JavaScript => Ok(Box::new(super::javascript::JavaScriptWorker::new())),
         ExecutionLanguage::Go => Ok(Box::new(super::go_tools::GoWorker::new())),
-        ExecutionLanguage::ContextBundle => Ok(Box::new(super::go_tools::ContextBundleWorker::new())),
+        ExecutionLanguage::ContextBundle => {
+            Ok(Box::new(super::go_tools::ContextBundleWorker::new()))
+        }
         ExecutionLanguage::Shell => Ok(Box::new(super::shell::ShellWorker::new())),
         ExecutionLanguage::Wasm => Ok(Box::new(super::wasm::WasmWorker::new())),
-        ExecutionLanguage::Osmosis => Ok(Box::new(super::osmosis::OsmosisWorker::new(artifact_store))),
+        ExecutionLanguage::Osmosis => {
+            Ok(Box::new(super::osmosis::OsmosisWorker::new(artifact_store)))
+        }
     }
 }

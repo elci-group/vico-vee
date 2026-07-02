@@ -6,7 +6,7 @@ Extracted from `vico-desktop` so that ViCo can talk to VEE over a well-defined H
 
 ## What it does
 
-- Accepts sandboxed execution tasks (Python, Go, Shell, Context Bundles, Osmosis).
+- Accepts sandboxed execution tasks (Python, Rust, JavaScript, Wasm, Go, Shell, Context Bundles, Osmosis).
 - Enforces capability-based security with Ed25519-signed grants.
 - Isolates workers via rlimits, Landlock, and seccomp-bpf.
 - Persists artifacts in a content-addressable SQLite-backed store.
@@ -94,9 +94,13 @@ Configuration is resolved in this order (later overrides earlier):
 | `VICO_VEE_RATE_LIMIT_BURST` | Per-IP rate-limit burst (default: 50) |
 | `VICO_VEE_EXEC_RATE_LIMIT_PER_SEC` | Per-agent execution rate limit (default: 10) |
 | `VICO_VEE_EXEC_RATE_LIMIT_BURST` | Per-agent execution burst (default: 30) |
+| `VICO_VEE_PROJECT_RATE_LIMIT_PER_SEC` | Per-project execution rate limit (default: 10) |
+| `VICO_VEE_PROJECT_RATE_LIMIT_BURST` | Per-project execution burst (default: 30) |
+| `VICO_VEE_TRUSTED_PROXY_CIDRS` | Comma-separated trusted proxy CIDRs for `X-Forwarded-For` |
 | `VICO_VEE_SHUTDOWN_GRACE_PERIOD_SECS` | Graceful shutdown timeout (default: 30) |
 | `VICO_VEE_LOG_FORMAT` | `pretty`, `json`, or `compact` |
-| `VICO_VEE_OLLAMA_URL` | Ollama endpoint (reserved for future ODIN integration) |
+| `VICO_VEE_OLLAMA_URL` | Ollama endpoint used by ODIN (default: http://127.0.0.1:11434) |
+| `VICO_VEE_PATTERN_STORE_PATH` | Path to the pattern store database |
 
 ## API
 
@@ -120,8 +124,8 @@ Public routes do not require authentication. All other routes require a valid `A
 | POST | `/vee/patterns` | read | Find learned patterns |
 | POST | `/vee/audit` | read | Run audit suite |
 | POST | `/vee/checkpoints` | read | Checkpoint statistics |
-| POST | `/vee/odin/health` | read | ODIN health (stub) |
-| POST | `/vee/odin/model` | admin | Set ODIN model (stub) |
+| POST | `/vee/odin/health` | read | ODIN / Ollama health and model list |
+| POST | `/vee/odin/model` | admin | Set active ODIN model |
 | POST | `/vee/diff` | submit | Start Osmosis diff |
 | POST | `/vee/merge` | submit | Apply Osmosis merge |
 | POST | `/vee/reject` | submit | Reject Osmosis patch |

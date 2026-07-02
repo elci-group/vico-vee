@@ -754,7 +754,6 @@ async fn health_ready_and_metrics_endpoints() {
     server.stop().await;
 }
 
-
 #[tokio::test]
 async fn hypothesis_validation_is_populated_on_successful_execution() {
     let tmp = tempfile::tempdir().unwrap();
@@ -927,7 +926,10 @@ async fn unsupported_language_returns_error() {
     assert_eq!(resp.status(), StatusCode::OK);
     let result: Value = resp.json().await.unwrap();
     assert!(!result["success"].as_bool().unwrap());
-    assert!(result["error"].as_str().unwrap().contains("unsupported language"));
+    assert!(result["error"]
+        .as_str()
+        .unwrap()
+        .contains("unsupported language"));
 
     server.stop().await;
 }

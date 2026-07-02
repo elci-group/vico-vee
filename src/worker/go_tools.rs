@@ -3,7 +3,9 @@
 //! Both workers delegate to external CLI tooling (`goten`, `egor`, `bound`)
 //! and share helpers for resolving tool binaries.
 
-use super::core::{executable_present, tool_binary, verify_task_grants, RuntimeWorker, WorkerOutput};
+use super::core::{
+    executable_present, tool_binary, verify_task_grants, RuntimeWorker, WorkerOutput,
+};
 use crate::capability::CapabilityVerifier;
 use crate::types::*;
 use async_trait::async_trait;

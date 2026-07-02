@@ -39,15 +39,13 @@ impl OdinClient {
             .send()
             .await
         {
-            Ok(resp) if resp.status().is_success() => {
-                match resp.json::<TagsResponse>().await {
-                    Ok(tags) => tags.models.into_iter().map(|m| m.name).collect(),
-                    Err(e) => {
-                        tracing::warn!(error = %e, "failed to parse Ollama tags response");
-                        vec![]
-                    }
+            Ok(resp) if resp.status().is_success() => match resp.json::<TagsResponse>().await {
+                Ok(tags) => tags.models.into_iter().map(|m| m.name).collect(),
+                Err(e) => {
+                    tracing::warn!(error = %e, "failed to parse Ollama tags response");
+                    vec![]
                 }
-            }
+            },
             Ok(resp) => {
                 tracing::warn!(status = %resp.status(), "Ollama tags request failed");
                 vec![]

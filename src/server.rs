@@ -10,11 +10,11 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use tower_http::limit::RequestBodyLimitLayer;
-use tower_http::timeout::TimeoutLayer;
 use serde::Deserialize;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use tower_http::limit::RequestBodyLimitLayer;
+use tower_http::timeout::TimeoutLayer;
 
 use crate::{
     capability::CapabilityRegistry,
@@ -59,7 +59,11 @@ impl AppState {
                 "admin".to_string(),
                 crate::auth::ApiKey {
                     token: "test-admin-token".to_string(),
-                    scopes: vec!["submit".to_string(), "read".to_string(), "admin".to_string()],
+                    scopes: vec![
+                        "submit".to_string(),
+                        "read".to_string(),
+                        "admin".to_string(),
+                    ],
                 },
             );
             keys.insert(
@@ -113,23 +117,21 @@ impl AppState {
 
         let verifier = capability_issuer.lock().await.verifier();
         let executions_db = config.data_dir.join("vee_executions.db");
-        let execution_store =
-            crate::execution_store::ExecutionStore::new(&executions_db).ok();
+        let execution_store = crate::execution_store::ExecutionStore::new(&executions_db).ok();
         let patterns_db = config
             .pattern_store_path
             .clone()
             .unwrap_or_else(|| config.data_dir.join("vee_patterns.db"));
-        let pattern_store =
-            crate::pattern::PatternStore::new_with_path(&patterns_db).ok();
-        let odin_client =
-            crate::daemon::odin::OdinClient::new(config.ollama_url.clone());
-        let odin_state =
-            crate::daemon::odin::OdinState::new(Some(odin_client));
+        let pattern_store = crate::pattern::PatternStore::new_with_path(&patterns_db).ok();
+        let odin_client = crate::daemon::odin::OdinClient::new(config.ollama_url.clone());
+        let odin_state = crate::daemon::odin::OdinState::new(Some(odin_client));
         let vee = Arc::new(
             ExecutorDaemon::try_new_full(verifier, execution_store, pattern_store, odin_state)
                 .map_err(|e| format!("executor daemon: {}", e))?,
         );
-        vee.restore_executions().await.map_err(|e| format!("restore executions: {e}"))?;
+        vee.restore_executions()
+            .await
+            .map_err(|e| format!("restore executions: {e}"))?;
         vee.start().await;
 
         let auth_keys = crate::auth::AuthKeys::load(&config.api_keys)
@@ -337,7 +339,11 @@ pub async fn vee_status(
     project: crate::tenant::ProjectContext,
     Json(input): Json<VeeExecutionIdInput>,
 ) -> JsonResponse<serde_json::Value> {
-    match state.vee.get_status(&input.execution_id, Some(&project.project_id)).await {
+    match state
+        .vee
+        .get_status(&input.execution_id, Some(&project.project_id))
+        .await
+    {
         Some(result) => JsonResponse(serde_json::json!({ "success": true, "data": result })),
         None => JsonResponse(serde_json::json!({
             "success": false,
@@ -351,7 +357,11 @@ pub async fn vee_cancel(
     project: crate::tenant::ProjectContext,
     Json(input): Json<VeeExecutionIdInput>,
 ) -> JsonResponse<serde_json::Value> {
-    match state.vee.cancel(&input.execution_id, Some(&project.project_id)).await {
+    match state
+        .vee
+        .cancel(&input.execution_id, Some(&project.project_id))
+        .await
+    {
         Ok(()) => JsonResponse(serde_json::json!({
             "success": true,
             "execution_id": input.execution_id,
@@ -393,7 +403,10 @@ pub async fn vee_list(
         _ => None,
     });
 
-    let mut results = state.vee.list(status_filter, Some(&project.project_id)).await;
+    let mut results = state
+        .vee
+        .list(status_filter, Some(&project.project_id))
+        .await;
     results.truncate(input.limit);
 
     JsonResponse(serde_json::json!({ "success": true, "data": results }))
@@ -404,7 +417,10 @@ pub async fn vee_artifacts(
     project: crate::tenant::ProjectContext,
     Json(input): Json<VeeExecutionIdInput>,
 ) -> JsonResponse<serde_json::Value> {
-    let artifacts = state.vee.get_artifacts(&input.execution_id, Some(&project.project_id)).await;
+    let artifacts = state
+        .vee
+        .get_artifacts(&input.execution_id, Some(&project.project_id))
+        .await;
     let artifacts_json: Vec<serde_json::Value> = artifacts
         .into_iter()
         .map(|(id, artifact)| {

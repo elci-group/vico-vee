@@ -15,7 +15,10 @@ pub(crate) async fn run_execution(
     token: CancellationToken,
 ) {
     let execution_id = task.execution_id.clone();
-    let project_id = task.project_id.clone().unwrap_or_else(|| crate::tenant::DEFAULT_PROJECT.to_string());
+    let project_id = task
+        .project_id
+        .clone()
+        .unwrap_or_else(|| crate::tenant::DEFAULT_PROJECT.to_string());
     let store_key = format!("{}/{}", project_id, execution_id);
     let started_at = Utc::now();
     let project_id_for_persist = project_id.clone();
@@ -141,10 +144,7 @@ pub(crate) async fn run_execution(
                     output.exit_code,
                 )
             });
-            let confidence = validation
-                .as_ref()
-                .map(|v| v.confidence)
-                .unwrap_or(1.0);
+            let confidence = validation.as_ref().map(|v| v.confidence).unwrap_or(1.0);
 
             // Persist artifacts and keep them on the result.
             let mut provenance = task.provenance.clone();
@@ -242,7 +242,9 @@ async fn mark_failed(inner: &Inner, store_key: &str, project_id: &str, message: 
             result.latency_ms = latency_ms;
         }
     }
-    inner.persist_result(Some(project_id), execution_id(store_key)).await;
+    inner
+        .persist_result(Some(project_id), execution_id(store_key))
+        .await;
     emit_event(
         inner,
         "failed",
@@ -266,7 +268,9 @@ async fn mark_cancelled(inner: &Inner, store_key: &str, project_id: &str) {
             result.completed_at = Some(Utc::now());
         }
     }
-    inner.persist_result(Some(project_id), execution_id(store_key)).await;
+    inner
+        .persist_result(Some(project_id), execution_id(store_key))
+        .await;
     emit_event(inner, "cancelled", store_key, json!({}));
 }
 

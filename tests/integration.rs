@@ -869,7 +869,7 @@ async fn x_forwarded_for_respected_from_trusted_proxy() {
     let mut config = test_config(&tmp);
     config.rate_limit.per_sec = 1;
     config.rate_limit.burst = 1;
-    config.rate_limit.trusted_proxy_cidrs = vec!["127.0.0.0/8".to_string()];
+    config.rate_limit.trusted_proxy_cidrs = vec!["127.0.0.0/8".to_string(), "::1/128".to_string()];
     let server = spawn_server(config).await;
     let client = Client::new();
 

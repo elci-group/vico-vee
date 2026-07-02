@@ -11,6 +11,14 @@ use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+/// Output produced by a successful worker execution.
+#[derive(Debug, Clone)]
+pub struct WorkerOutput {
+    pub artifacts: Vec<crate::types::Artifact>,
+    pub stderr: String,
+    pub exit_code: Option<i32>,
+}
+
 /// A worker capable of executing tasks in a specific language.
 #[async_trait]
 pub trait RuntimeWorker: Send + Sync {
@@ -26,11 +34,11 @@ pub trait RuntimeWorker: Send + Sync {
         budget: ExecutionBudget,
     ) -> Result<(), String>;
 
-    /// Execute a task and return artifacts.
+    /// Execute a task and return artifacts, stderr, and exit code.
     async fn execute(
         &self,
         task: &crate::types::ExecutionTask,
-    ) -> Result<Vec<crate::types::Artifact>, ExecutionError>;
+    ) -> Result<WorkerOutput, ExecutionError>;
 
     /// Gracefully shut down the worker.
     async fn shutdown(self: Box<Self>) -> Result<(), String>;
@@ -105,13 +113,15 @@ pub(crate) fn executable_present(binary: &str) -> bool {
 pub fn create_worker(
     language: ExecutionLanguage,
     artifact_store: Arc<crate::artifact::ArtifactStore>,
-) -> Box<dyn RuntimeWorker> {
+) -> Result<Box<dyn RuntimeWorker>, String> {
     match language {
-        ExecutionLanguage::Python => Box::new(super::python::PythonWorker::new()),
-        ExecutionLanguage::Go => Box::new(super::go_tools::GoWorker::new()),
-        ExecutionLanguage::ContextBundle => Box::new(super::go_tools::ContextBundleWorker::new()),
-        ExecutionLanguage::Shell => Box::new(super::shell::ShellWorker::new()),
-        ExecutionLanguage::Osmosis => Box::new(super::osmosis::OsmosisWorker::new(artifact_store)),
-        _ => Box::new(super::python::PythonWorker::new()),
+        ExecutionLanguage::Python => Ok(Box::new(super::python::PythonWorker::new())),
+        ExecutionLanguage::Rust => Ok(Box::new(super::rust::RustWorker::new())),
+        ExecutionLanguage::JavaScript => Ok(Box::new(super::javascript::JavaScriptWorker::new())),
+        ExecutionLanguage::Go => Ok(Box::new(super::go_tools::GoWorker::new())),
+        ExecutionLanguage::ContextBundle => Ok(Box::new(super::go_tools::ContextBundleWorker::new())),
+        ExecutionLanguage::Shell => Ok(Box::new(super::shell::ShellWorker::new())),
+        ExecutionLanguage::Wasm => Ok(Box::new(super::wasm::WasmWorker::new())),
+        ExecutionLanguage::Osmosis => Ok(Box::new(super::osmosis::OsmosisWorker::new(artifact_store))),
     }
 }

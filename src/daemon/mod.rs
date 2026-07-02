@@ -249,6 +249,11 @@ impl ExecutorDaemon {
         self.inner.event_tx.subscribe()
     }
 
+    /// Return the number of currently in-flight executions.
+    pub async fn inflight_count(&self) -> usize {
+        self.inner.inflight.lock().await.len()
+    }
+
     /// Replace the capability verifier used for new executions.
     pub fn update_verifier(&self, verifier: CapabilityVerifier) {
         let mut guard = self

@@ -37,6 +37,24 @@ pub struct AppState {
 }
 
 impl AppState {
+    /// Create an `AppState` for unit tests without async setup.
+    #[cfg(test)]
+    pub fn test_new(config: Config) -> Self {
+        use crate::capability::CapabilityRegistry;
+        use std::sync::Arc;
+        use tokio::sync::Mutex;
+
+        let vee = Arc::new(ExecutorDaemon::new());
+        let capability_issuer = Arc::new(Mutex::new(CapabilityRegistry::new_with_seed([0u8; 32])));
+        let auth_keys = crate::auth::AuthKeys::default();
+        Self {
+            vee,
+            capability_issuer,
+            auth_keys,
+            config,
+        }
+    }
+
     pub async fn try_new(config: Config) -> Result<Self, String> {
         std::fs::create_dir_all(&config.data_dir).map_err(|e| format!("create data dir: {}", e))?;
 

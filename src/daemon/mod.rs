@@ -439,3 +439,21 @@ impl Default for ExecutorDaemon {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod daemon_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn db_healthy_returns_true_with_store() {
+        let tmp = tempfile::tempdir().unwrap();
+        let db = tmp.path().join("exec.db");
+        let store = ExecutionStore::new(&db).unwrap();
+        let daemon = ExecutorDaemon::try_new_with_verifier(
+            CapabilityRegistry::new_with_seed([0u8; 32]).verifier(),
+            Some(store),
+        )
+        .unwrap();
+        assert!(daemon.db_healthy().await);
+    }
+}

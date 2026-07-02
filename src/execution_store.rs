@@ -93,7 +93,7 @@ impl ExecutionStore {
     /// Return true if the underlying SQLite connection is usable.
     pub fn ping(&self) -> Result<(), String> {
         self.conn
-            .execute("SELECT 1", [])
+            .query_row("SELECT 1", [], |_row| Ok(()))
             .map(|_| ())
             .map_err(|e| format!("ping execution store: {e}"))
     }

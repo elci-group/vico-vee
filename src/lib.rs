@@ -17,6 +17,7 @@ pub mod capability;
 pub mod checkpoint;
 pub mod config;
 pub mod daemon;
+pub mod execution_store;
 pub mod health;
 pub mod limit;
 pub mod migrations;

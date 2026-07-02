@@ -6,6 +6,7 @@
 //! workers are stored in the persistent ArtifactStore when possible.
 
 use crate::capability::{CapabilityRegistry, CapabilityVerifier};
+use crate::execution_store::ExecutionStore;
 use crate::types::*;
 use chrono::Utc;
 use serde_json::json;
@@ -30,6 +31,7 @@ pub struct ExecutorDaemon {
 
 pub(crate) struct Inner {
     pub(crate) store: RwLock<HashMap<String, ExecutionResult>>,
+    pub(crate) execution_store: Option<ExecutionStore>,
     pub(crate) verifier: std::sync::RwLock<CapabilityVerifier>,
     pub(crate) cancel: CancellationToken,
     pub(crate) handle: Mutex<Option<JoinHandle<()>>>,
@@ -44,22 +46,31 @@ impl ExecutorDaemon {
         Self::try_new_with_verifier(registry.verifier())
     }
 
-    /// Create a daemon with an explicit capability verifier.
-    pub fn try_new_with_verifier(verifier: CapabilityVerifier) -> Result<Self, String> {
-        Ok(Self::with_verifier(verifier))
+    /// Create a daemon with an explicit capability verifier and optional
+    /// persistent execution store.
+    pub fn try_new_with_verifier(
+        verifier: CapabilityVerifier,
+        execution_store: Option<ExecutionStore>,
+    ) -> Result<Self, String> {
+        let mut daemon = Self::with_verifier(verifier, execution_store);
+        if let Err(e) = daemon.load_executions() {
+            return Err(format!("load persisted executions: {e}"));
+        }
+        Ok(daemon)
     }
 
     /// Synchronous constructor for callers that do not need async setup.
     pub fn new() -> Self {
         let registry = CapabilityRegistry::new_with_seed([0u8; 32]);
-        Self::with_verifier(registry.verifier())
+        Self::with_verifier(registry.verifier(), None)
     }
 
-    fn with_verifier(verifier: CapabilityVerifier) -> Self {
+    fn with_verifier(verifier: CapabilityVerifier, execution_store: Option<ExecutionStore>) -> Self {
         let (event_tx, _event_rx) = broadcast::channel(128);
         Self {
             inner: Arc::new(Inner {
                 store: RwLock::new(HashMap::new()),
+                execution_store,
                 verifier: std::sync::RwLock::new(verifier),
                 cancel: CancellationToken::new(),
                 handle: Mutex::new(None),
@@ -67,6 +78,23 @@ impl ExecutorDaemon {
                 inflight: Mutex::new(HashMap::new()),
             }),
         }
+    }
+
+    /// Load persisted executions into the in-memory store.
+    fn load_executions(&mut self) -> Result<(), String> {
+        if let Some(store) = &self.inner.execution_store {
+            let results = store.load_all()?;
+            let mut map = self.inner.store.blocking_write();
+            for result in results {
+                let project_id = result
+                    .project_id
+                    .clone()
+                    .unwrap_or_else(|| crate::tenant::DEFAULT_PROJECT.to_string());
+                let key = Self::project_key(Some(&project_id), &result.execution_id);
+                map.insert(key, result);
+            }
+        }
+        Ok(())
     }
 
     /// Start the daemon's background task pump.

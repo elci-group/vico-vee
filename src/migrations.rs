@@ -38,6 +38,12 @@ pub const MIGRATIONS: &[Migration] = &[
             "../migrations/002_add_artifact_blob_hash.down.sql"
         )),
     },
+    Migration {
+        version: 3,
+        name: "add_executions",
+        sql: include_str!("../migrations/003_add_executions.sql"),
+        down_sql: Some(include_str!("../migrations/003_add_executions.down.sql")),
+    },
 ];
 
 /// Run all pending migrations up to the latest known version.

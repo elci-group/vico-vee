@@ -640,6 +640,35 @@ async fn multi_tenancy_project_isolation() {
 }
 
 #[tokio::test]
+async fn request_body_limit_rejects_oversized_payloads() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut config = test_config(&tmp);
+    config.body_limit_mb = 1;
+    let server = spawn_server(config).await;
+    let client = Client::new();
+
+    let url = format!("http://{}/vee/submit", server.addr);
+    let huge_code = "x".repeat(2 * 1024 * 1024);
+    let body = json!({
+        "agent_id": "limit-agent",
+        "language": "shell",
+        "source_code": huge_code,
+        "capabilities": ["process_spawn"],
+    });
+
+    let resp = client
+        .post(&url)
+        .bearer_auth(ADMIN_TOKEN)
+        .json(&body)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::PAYLOAD_TOO_LARGE);
+
+    server.stop().await;
+}
+
+#[tokio::test]
 async fn health_ready_and_metrics_endpoints() {
     let tmp = tempfile::tempdir().unwrap();
     let server = spawn_server(test_config(&tmp)).await;

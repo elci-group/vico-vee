@@ -10,6 +10,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
+use tower_http::limit::RequestBodyLimitLayer;
 use serde::Deserialize;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -195,6 +196,9 @@ pub fn router(state: AppState) -> Router {
         .layer(middleware::from_fn_with_state(
             state.clone(),
             crate::limit::ip_rate_limit_middleware,
+        ))
+        .layer(RequestBodyLimitLayer::new(
+            state.config.body_limit_mb * 1024 * 1024,
         ))
         .layer(middleware::from_fn(crate::health::set_request_id))
         .with_state(state)

@@ -205,6 +205,10 @@ pub fn router(state: AppState) -> Router {
             state.config.body_limit_mb * 1024 * 1024,
         ))
         .layer(middleware::from_fn(crate::health::set_request_id))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            crate::health::request_metrics_middleware,
+        ))
         .with_state(state)
 }
 

@@ -18,7 +18,7 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
 mod audit;
-mod odin;
+pub mod odin;
 mod patterns;
 mod runner;
 

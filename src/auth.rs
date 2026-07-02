@@ -152,8 +152,9 @@ pub fn required_scope_for_path(path: &str) -> Option<&'static str> {
         // Read-only queries and dashboards.
         "/vee/status" | "/vee/list" | "/vee/artifacts" | "/vee/dashboard" | "/vee/patterns"
         | "/vee/audit" | "/vee/checkpoints" => Some("read"),
-        // Administrative ODIN control.
-        "/vee/odin/health" | "/vee/odin/model" => Some("admin"),
+        // ODIN health is read-only; model selection is administrative.
+        "/vee/odin/health" => Some("read"),
+        "/vee/odin/model" => Some("admin"),
         // Capability signing-key rotation.
         "/vee/admin/rotate-key" => Some("admin"),
         // Data lifecycle administration.
@@ -270,6 +271,7 @@ mod tests {
     fn scoped_routes_require_scope() {
         assert_eq!(required_scope_for_path("/vee/submit"), Some("submit"));
         assert_eq!(required_scope_for_path("/vee/dashboard"), Some("read"));
+        assert_eq!(required_scope_for_path("/vee/odin/health"), Some("read"));
         assert_eq!(required_scope_for_path("/vee/odin/model"), Some("admin"));
     }
 

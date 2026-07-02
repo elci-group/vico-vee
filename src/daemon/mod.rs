@@ -210,21 +210,23 @@ impl ExecutorDaemon {
             .store
             .read()
             .await
-            .values()
-            .filter(|r| r.execution_id.starts_with(&prefix) || {
-                // Prefer prefix matching on the composite store key.
-                let key = Self::project_key(project_id, &r.execution_id);
-                self.inner.store.read().await.contains_key(&key)
-            })
+            .iter()
+            .filter(|(k, _)| k.starts_with(&prefix))
+            .map(|(_, v)| v)
             .filter(|r| filter.as_ref().is_none_or(|f| r.status == *f))
             .cloned()
             .collect()
     }
 
     /// Return artifact summaries for an execution.
-    pub async fn get_artifacts(&self, execution_id: &str) -> Vec<(String, ArtifactSummary)> {
+    pub async fn get_artifacts(
+        &self,
+        execution_id: &str,
+        project_id: Option<&str>,
+    ) -> Vec<(String, ArtifactSummary)> {
         let store = self.inner.store.read().await;
-        let Some(result) = store.get(execution_id) else {
+        let key = Self::project_key(project_id, execution_id);
+        let Some(result) = store.get(&key) else {
             return vec![];
         };
         result

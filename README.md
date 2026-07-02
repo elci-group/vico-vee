@@ -22,6 +22,30 @@ cargo run
 
 The service listens on port `9987` by default. Override with `VICO_VEE_PORT`.
 
+### Authentication
+
+By default the service requires API-key authentication. On first run, generate
+an admin key:
+
+```bash
+vico-vee --generate-admin-key
+```
+
+This writes a key file to the configured config directory (override with
+`VICO_VEE_CONFIG_DIR`). Pass `--generate-admin-key /path/to/api_keys.toml` to
+write to a specific location.
+
+To allow unauthenticated access (development only), set `require_auth = false`
+in your config or pass `--require-auth false`.
+
+API keys are defined in TOML:
+
+```toml
+[keys.admin]
+token = "your-secure-token"
+scopes = ["submit", "read", "admin"]
+```
+
 ### TLS
 
 Provide a certificate and key to serve HTTPS:
@@ -63,6 +87,7 @@ Configuration is resolved in this order (later overrides earlier):
 | `VICO_VEE_TLS_KEY` | Path to TLS private key (PEM) |
 | `VICO_VEE_API_KEYS_FILE` | Path to TOML API-keys file |
 | `VICO_VEE_API_KEYS` | Inline TOML API-keys configuration |
+| `VICO_VEE_REQUIRE_AUTH` | Require API-key auth even when no keys file exists (`true`/`false`) |
 | `VICO_VEE_BODY_LIMIT_MB` | Maximum request body size in MB (default: 16) |
 | `VICO_VEE_REQUEST_TIMEOUT_SECS` | Request handling timeout (default: 30) |
 | `VICO_VEE_RATE_LIMIT_PER_SEC` | Per-IP rate limit (default: 10) |

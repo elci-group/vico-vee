@@ -496,8 +496,8 @@ async fn test_daemon_cancel_queued_execution() {
     };
     daemon.submit(task).await.unwrap();
 
-    daemon.cancel("cancel-queued-1").await.unwrap();
-    let status = daemon.get_status("cancel-queued-1").await.unwrap();
+    daemon.cancel("cancel-queued-1", None).await.unwrap();
+    let status = daemon.get_status("cancel-queued-1", None).await.unwrap();
     assert_eq!(status.status, ExecutionStatus::Cancelled);
     daemon.stop().await;
 }
@@ -875,7 +875,7 @@ async fn test_daemon_submit_python_task_completes_with_stdout_artifact() {
 
     let mut final_result = None;
     for _ in 0..50 {
-        if let Some(r) = daemon.get_status(execution_id).await {
+        if let Some(r) = daemon.get_status(execution_id, None).await {
             if matches!(
                 r.status,
                 ExecutionStatus::Completed | ExecutionStatus::Failed | ExecutionStatus::Cancelled
@@ -946,12 +946,12 @@ async fn test_daemon_submit_then_cancel_marks_cancelled() {
     daemon.submit(task).await.expect("submit should succeed");
     tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
     daemon
-        .cancel(execution_id)
+        .cancel(execution_id, None)
         .await
         .expect("cancel should succeed");
 
     let status = daemon
-        .get_status(execution_id)
+        .get_status(execution_id, None)
         .await
         .expect("result should exist");
     assert_eq!(status.status, ExecutionStatus::Cancelled);

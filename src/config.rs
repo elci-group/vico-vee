@@ -375,6 +375,21 @@ impl Config {
                 .parse()
                 .map_err(|e| format!("VICO_VEE_RATE_LIMIT_BURST: {e}"))?;
         }
+        if let Ok(v) = std::env::var("VICO_VEE_EXEC_RATE_LIMIT_PER_SEC") {
+            self.rate_limit_exec_per_sec = v
+                .parse()
+                .map_err(|e| format!("VICO_VEE_EXEC_RATE_LIMIT_PER_SEC: {e}"))?;
+        }
+        if let Ok(v) = std::env::var("VICO_VEE_EXEC_RATE_LIMIT_BURST") {
+            self.rate_limit_exec_burst = v
+                .parse()
+                .map_err(|e| format!("VICO_VEE_EXEC_RATE_LIMIT_BURST: {e}"))?;
+        }
+        if let Ok(v) = std::env::var("VICO_VEE_SHUTDOWN_GRACE_PERIOD_SECS") {
+            self.shutdown_grace_period_secs = v
+                .parse()
+                .map_err(|e| format!("VICO_VEE_SHUTDOWN_GRACE_PERIOD_SECS: {e}"))?;
+        }
         Ok(())
     }
 
@@ -422,6 +437,15 @@ impl Config {
         if let Some(v) = cli.rate_limit_burst {
             self.rate_limit_burst = v;
         }
+        if let Some(v) = cli.exec_rate_limit_per_sec {
+            self.rate_limit_exec_per_sec = v;
+        }
+        if let Some(v) = cli.exec_rate_limit_burst {
+            self.rate_limit_exec_burst = v;
+        }
+        if let Some(v) = cli.shutdown_grace_period_secs {
+            self.shutdown_grace_period_secs = v;
+        }
     }
 }
 
@@ -448,6 +472,9 @@ mod tests {
         assert_eq!(cfg.request_timeout_secs, 30);
         assert_eq!(cfg.rate_limit_per_sec, 10);
         assert_eq!(cfg.rate_limit_burst, 50);
+        assert_eq!(cfg.rate_limit_exec_per_sec, 10);
+        assert_eq!(cfg.rate_limit_exec_burst, 30);
+        assert_eq!(cfg.shutdown_grace_period_secs, 30);
     }
 
     #[test]

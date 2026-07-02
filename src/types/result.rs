@@ -8,6 +8,7 @@ use super::schema::ValidationResult;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExecutionResult {
     pub execution_id: String,
+    pub project_id: Option<String>,
     pub status: ExecutionStatus,
     pub phase: ExecutionPhase,
     pub artifacts: Vec<Artifact>,

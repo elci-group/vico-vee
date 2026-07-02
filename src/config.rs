@@ -71,6 +71,19 @@ pub struct Config {
     /// Rate limit: maximum burst per IP.
     #[serde(default = "default_rate_limit_burst")]
     pub rate_limit_burst: u32,
+
+    /// Execution rate limit: submissions per second per agent_id.
+    #[serde(default = "default_exec_rate_limit_per_sec")]
+    pub rate_limit_exec_per_sec: u32,
+
+    /// Execution rate limit: maximum burst per agent_id.
+    #[serde(default = "default_exec_rate_limit_burst")]
+    pub rate_limit_exec_burst: u32,
+
+    /// Seconds to wait for in-flight executions to finish before forcing
+    /// cancellation during graceful shutdown.
+    #[serde(default = "default_shutdown_grace_period_secs")]
+    pub shutdown_grace_period_secs: u64,
 }
 
 /// Log output format.

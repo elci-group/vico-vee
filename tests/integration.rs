@@ -753,3 +753,181 @@ async fn health_ready_and_metrics_endpoints() {
 
     server.stop().await;
 }
+
+
+#[tokio::test]
+async fn hypothesis_validation_is_populated_on_successful_execution() {
+    let tmp = tempfile::tempdir().unwrap();
+    let server = spawn_server(test_config(&tmp)).await;
+
+    if !python_execution_available(&server).await {
+        server.stop().await;
+        return;
+    }
+
+    let client = Client::new();
+    let code = "print('hello')";
+    let hypothesis = json!({
+        "expected_columns": [],
+        "invariants": ["no errors in stderr"]
+    });
+
+    let url = format!("http://{}/vee/submit", server.addr);
+    let body = json!({
+        "agent_id": "hypothesis-agent",
+        "language": "python",
+        "source_code": code,
+        "capabilities": ["process_spawn"],
+        "hypothesis": hypothesis,
+    });
+    let submit: Value = client
+        .post(&url)
+        .bearer_auth(ADMIN_TOKEN)
+        .json(&body)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let exec_id = submit["execution_id"].as_str().unwrap();
+
+    let terminal = wait_terminal(&client, &server.addr, ADMIN_TOKEN, exec_id, None)
+        .await
+        .expect("task should reach terminal state");
+    assert_eq!(terminal["data"]["status"], "Completed");
+
+    let validation = terminal["data"]["validation"].clone();
+    assert!(
+        validation.is_object(),
+        "validation result should be present: {:?}",
+        terminal["data"]
+    );
+    assert_eq!(validation["hypothesis_validated"], true);
+    assert!(validation["confidence"].as_f64().unwrap() > 0.0);
+
+    server.stop().await;
+}
+
+#[tokio::test]
+async fn rate_limit_project_burst_returns_429() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut config = test_config(&tmp);
+    config.rate_limit.project_per_sec = 1;
+    config.rate_limit.project_burst = 1;
+    let server = spawn_server(config).await;
+    let client = Client::new();
+
+    let url = format!("http://{}/vee/submit", server.addr);
+    let body = json!({
+        "agent_id": "rate-limit-agent",
+        "language": "shell",
+        "source_code": "echo ok",
+        "capabilities": ["process_spawn"],
+    });
+
+    let mut handles = Vec::new();
+    for _ in 0..3 {
+        let client = client.clone();
+        let url = url.clone();
+        let body = body.clone();
+        handles.push(tokio::spawn(async move {
+            client
+                .post(&url)
+                .bearer_auth(ADMIN_TOKEN)
+                .header("x-vee-project", "project-rate-limit")
+                .json(&body)
+                .send()
+                .await
+                .unwrap()
+        }));
+    }
+    let responses: Vec<_> = futures::future::join_all(handles)
+        .await
+        .into_iter()
+        .map(|r| r.unwrap())
+        .collect();
+
+    let ok_count = responses
+        .iter()
+        .filter(|r| r.status() == StatusCode::OK)
+        .count();
+    let rate_limited = responses
+        .iter()
+        .filter(|r| r.status() == StatusCode::TOO_MANY_REQUESTS)
+        .count();
+
+    assert!(ok_count >= 1, "at least one submission should succeed");
+    assert!(rate_limited >= 1, "project burst should be exceeded");
+
+    server.stop().await;
+}
+
+#[tokio::test]
+async fn x_forwarded_for_respected_from_trusted_proxy() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut config = test_config(&tmp);
+    config.rate_limit.per_sec = 1;
+    config.rate_limit.burst = 1;
+    config.rate_limit.trusted_proxy_cidrs = vec!["127.0.0.0/8".to_string()];
+    let server = spawn_server(config).await;
+    let client = Client::new();
+
+    let url = format!("http://{}/health", server.addr);
+    let first = client
+        .get(&url)
+        .header("x-forwarded-for", "203.0.113.5")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(first.status(), StatusCode::OK);
+
+    // A second request with a different client IP behind the same proxy should
+    // be allowed because the per-IP limit is keyed by the extracted client IP.
+    let second = client
+        .get(&url)
+        .header("x-forwarded-for", "198.51.100.1")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(second.status(), StatusCode::OK);
+
+    // A third request with the same IP as the first should be rate limited.
+    let third = client
+        .get(&url)
+        .header("x-forwarded-for", "203.0.113.5")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(third.status(), StatusCode::TOO_MANY_REQUESTS);
+
+    server.stop().await;
+}
+
+#[tokio::test]
+async fn unsupported_language_returns_error() {
+    let tmp = tempfile::tempdir().unwrap();
+    let server = spawn_server(test_config(&tmp)).await;
+    let client = Client::new();
+
+    let url = format!("http://{}/vee/submit", server.addr);
+    let body = json!({
+        "agent_id": "lang-agent",
+        "language": "fortran",
+        "source_code": "print *, 'hello'",
+        "capabilities": ["process_spawn"],
+    });
+    let resp = client
+        .post(&url)
+        .bearer_auth(ADMIN_TOKEN)
+        .json(&body)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let result: Value = resp.json().await.unwrap();
+    assert!(!result["success"].as_bool().unwrap());
+    assert!(result["error"].as_str().unwrap().contains("unsupported language"));
+
+    server.stop().await;
+}

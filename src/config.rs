@@ -64,26 +64,45 @@ pub struct Config {
     #[serde(default = "default_request_timeout_secs")]
     pub request_timeout_secs: u64,
 
-    /// Rate limit: requests per second per IP.
-    #[serde(default = "default_rate_limit_per_sec")]
-    pub rate_limit_per_sec: u32,
-
-    /// Rate limit: maximum burst per IP.
-    #[serde(default = "default_rate_limit_burst")]
-    pub rate_limit_burst: u32,
-
-    /// Execution rate limit: submissions per second per agent_id.
-    #[serde(default = "default_exec_rate_limit_per_sec")]
-    pub rate_limit_exec_per_sec: u32,
-
-    /// Execution rate limit: maximum burst per agent_id.
-    #[serde(default = "default_exec_rate_limit_burst")]
-    pub rate_limit_exec_burst: u32,
+    /// Rate limiting configuration.
+    #[serde(default)]
+    pub rate_limit: RateLimitConfig,
 
     /// Seconds to wait for in-flight executions to finish before forcing
     /// cancellation during graceful shutdown.
     #[serde(default = "default_shutdown_grace_period_secs")]
     pub shutdown_grace_period_secs: u64,
+}
+
+/// Rate-limit configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RateLimitConfig {
+    /// Requests per second per IP.
+    #[serde(default = "default_rate_limit_per_sec")]
+    pub per_sec: u32,
+
+    /// Maximum burst per IP.
+    #[serde(default = "default_rate_limit_burst")]
+    pub burst: u32,
+
+    /// Execution submissions per second per agent_id.
+    #[serde(default = "default_exec_rate_limit_per_sec")]
+    pub exec_per_sec: u32,
+
+    /// Maximum execution burst per agent_id.
+    #[serde(default = "default_exec_rate_limit_burst")]
+    pub exec_burst: u32,
+}
+
+impl Default for RateLimitConfig {
+    fn default() -> Self {
+        Self {
+            per_sec: default_rate_limit_per_sec(),
+            burst: default_rate_limit_burst(),
+            exec_per_sec: default_exec_rate_limit_per_sec(),
+            exec_burst: default_exec_rate_limit_burst(),
+        }
+    }
 }
 
 /// Log output format.
@@ -190,10 +209,7 @@ impl Default for Config {
             api_keys: ApiKeysConfig::default(),
             body_limit_mb: default_body_limit_mb(),
             request_timeout_secs: default_request_timeout_secs(),
-            rate_limit_per_sec: default_rate_limit_per_sec(),
-            rate_limit_burst: default_rate_limit_burst(),
-            rate_limit_exec_per_sec: default_exec_rate_limit_per_sec(),
-            rate_limit_exec_burst: default_exec_rate_limit_burst(),
+            rate_limit: RateLimitConfig::default(),
             shutdown_grace_period_secs: default_shutdown_grace_period_secs(),
         }
     }

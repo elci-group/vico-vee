@@ -5,7 +5,6 @@
 
 use axum::{
     extract::{ws::WebSocket, Json, State, WebSocketUpgrade},
-    http::StatusCode,
     middleware,
     response::{Json as JsonResponse, Response},
     routing::{get, post},

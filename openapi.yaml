@@ -7,11 +7,37 @@ servers:
   - url: http://localhost:9987
 paths:
   /health:
-    post:
+    get:
       summary: Health probe
       responses:
         "200":
           description: Service is alive
+  /ready:
+    get:
+      summary: Readiness probe
+      responses:
+        "200":
+          description: Service is ready
+        "503":
+          description: Service is not ready
+  /metrics:
+    get:
+      summary: Prometheus metrics
+      responses:
+        "200":
+          description: Prometheus exposition format
+  /admin/backup:
+    post:
+      summary: Create a backup tarball
+      responses:
+        "200":
+          description: Backup tarball
+  /admin/restore:
+    post:
+      summary: Restore from a backup tarball
+      responses:
+        "200":
+          description: Restore completed
   /vee/submit:
     post:
       summary: Submit a task for execution

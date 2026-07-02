@@ -228,6 +228,7 @@ fn test_checkpoint_from_result() {
 
     let result = ExecutionResult {
         execution_id: "exec-001".into(),
+        project_id: None,
         status: ExecutionStatus::Completed,
         phase: ExecutionPhase::Validation,
         artifacts: vec![],
@@ -464,7 +465,7 @@ fn test_executor_daemon_try_new_is_fallible_not_panicking() {
 #[tokio::test]
 async fn test_daemon_cancel_queued_execution() {
     let mut registry = crate::capability::CapabilityRegistry::new_with_seed([21u8; 32]);
-    let daemon = crate::ExecutorDaemon::try_new_with_verifier(registry.verifier())
+    let daemon = crate::ExecutorDaemon::try_new_with_verifier(registry.verifier(), None)
         .expect("daemon must construct");
     daemon.start().await;
 
@@ -702,7 +703,7 @@ fn test_osmosis_large_diff_performance() {
 #[tokio::test]
 async fn test_daemon_rejects_capabilities_without_grants() {
     let registry = CapabilityRegistry::new_with_seed([22u8; 32]);
-    let daemon = crate::ExecutorDaemon::try_new_with_verifier(registry.verifier())
+    let daemon = crate::ExecutorDaemon::try_new_with_verifier(registry.verifier(), None)
         .expect("daemon must construct");
 
     let task = ExecutionTask {
@@ -843,7 +844,7 @@ async fn test_worker_accepts_valid_grant_and_executes() {
 #[tokio::test]
 async fn test_daemon_submit_python_task_completes_with_stdout_artifact() {
     let mut registry = CapabilityRegistry::new_with_seed([41u8; 32]);
-    let daemon = crate::ExecutorDaemon::try_new_with_verifier(registry.verifier())
+    let daemon = crate::ExecutorDaemon::try_new_with_verifier(registry.verifier(), None)
         .expect("daemon must construct");
     daemon.start().await;
 
@@ -916,7 +917,7 @@ async fn test_daemon_submit_python_task_completes_with_stdout_artifact() {
 #[tokio::test]
 async fn test_daemon_submit_then_cancel_marks_cancelled() {
     let mut registry = CapabilityRegistry::new_with_seed([42u8; 32]);
-    let daemon = crate::ExecutorDaemon::try_new_with_verifier(registry.verifier())
+    let daemon = crate::ExecutorDaemon::try_new_with_verifier(registry.verifier(), None)
         .expect("daemon must construct");
     daemon.start().await;
 
@@ -967,7 +968,7 @@ async fn test_daemon_submit_then_cancel_marks_cancelled() {
 #[tokio::test]
 async fn test_daemon_submit_without_grant_rejects() {
     let registry = CapabilityRegistry::new_with_seed([43u8; 32]);
-    let daemon = crate::ExecutorDaemon::try_new_with_verifier(registry.verifier())
+    let daemon = crate::ExecutorDaemon::try_new_with_verifier(registry.verifier(), None)
         .expect("daemon must construct");
 
     let task = ExecutionTask {

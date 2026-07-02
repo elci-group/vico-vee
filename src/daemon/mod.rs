@@ -31,7 +31,7 @@ pub struct ExecutorDaemon {
 
 pub(crate) struct Inner {
     pub(crate) store: RwLock<HashMap<String, ExecutionResult>>,
-    pub(crate) execution_store: Option<ExecutionStore>,
+    pub(crate) execution_store: Option<Arc<std::sync::Mutex<ExecutionStore>>>,
     pub(crate) verifier: std::sync::RwLock<CapabilityVerifier>,
     pub(crate) cancel: CancellationToken,
     pub(crate) handle: Mutex<Option<JoinHandle<()>>>,
@@ -39,11 +39,38 @@ pub(crate) struct Inner {
     pub(crate) inflight: Mutex<HashMap<String, (CancellationToken, JoinHandle<()>)>>,
 }
 
+impl Inner {
+    /// Persist the current state of an execution to disk, if persistence is
+    /// enabled. Errors are logged but do not fail the request.
+    pub(crate) async fn persist_result(
+        &self,
+        project_id: Option<&str>,
+        execution_id: &str,
+    ) {
+        if let Some(store) = &self.execution_store {
+            let key = ExecutorDaemon::project_key(project_id, execution_id);
+            let maybe_result = self.store.read().await.get(&key).cloned();
+            if let Some(result) = maybe_result {
+                let project = project_id.unwrap_or(crate::tenant::DEFAULT_PROJECT).to_string();
+                let store = store.clone();
+                let execution_id = execution_id.to_string();
+                let _ = tokio::task::spawn_blocking(move || {
+                    let guard = store.lock().unwrap_or_else(|e| e.into_inner());
+                    if let Err(e) = guard.save(&project, &result) {
+                        tracing::warn!(execution_id, error = %e, "failed to persist execution result");
+                    }
+                })
+                .await;
+            }
+        }
+    }
+}
+
 impl ExecutorDaemon {
     /// Create a daemon using a deterministic in-memory capability verifier.
     pub fn try_new() -> Result<Self, String> {
         let registry = CapabilityRegistry::new_with_seed([0u8; 32]);
-        Self::try_new_with_verifier(registry.verifier())
+        Self::try_new_with_verifier(registry.verifier(), None)
     }
 
     /// Create a daemon with an explicit capability verifier and optional
@@ -52,7 +79,8 @@ impl ExecutorDaemon {
         verifier: CapabilityVerifier,
         execution_store: Option<ExecutionStore>,
     ) -> Result<Self, String> {
-        let mut daemon = Self::with_verifier(verifier, execution_store);
+        let store = execution_store.map(|s| Arc::new(std::sync::Mutex::new(s)));
+        let mut daemon = Self::with_verifier(verifier, store);
         if let Err(e) = daemon.load_executions() {
             return Err(format!("load persisted executions: {e}"));
         }
@@ -65,7 +93,10 @@ impl ExecutorDaemon {
         Self::with_verifier(registry.verifier(), None)
     }
 
-    fn with_verifier(verifier: CapabilityVerifier, execution_store: Option<ExecutionStore>) -> Self {
+    fn with_verifier(
+        verifier: CapabilityVerifier,
+        execution_store: Option<Arc<std::sync::Mutex<ExecutionStore>>>,
+    ) -> Self {
         let (event_tx, _event_rx) = broadcast::channel(128);
         Self {
             inner: Arc::new(Inner {
@@ -83,7 +114,10 @@ impl ExecutorDaemon {
     /// Load persisted executions into the in-memory store.
     fn load_executions(&mut self) -> Result<(), String> {
         if let Some(store) = &self.inner.execution_store {
-            let results = store.load_all()?;
+            let results = {
+                let guard = store.lock().unwrap_or_else(|e| e.into_inner());
+                guard.load_all()?
+            };
             let mut map = self.inner.store.blocking_write();
             for result in results {
                 let project_id = result
@@ -131,25 +165,6 @@ impl ExecutorDaemon {
         format!("{}/{}", project, execution_id)
     }
 
-    /// Persist the current state of an execution to disk, if persistence is
-    /// enabled. Errors are logged but do not fail the request.
-    pub(crate) async fn persist_result(
-        &self,
-        project_id: Option<&str>,
-        execution_id: &str,
-    ) {
-        if let Some(store) = &self.execution_store {
-            let key = Self::project_key(project_id, execution_id);
-            let maybe_result = self.store.read().await.get(&key).cloned();
-            if let Some(result) = maybe_result {
-                let project = project_id.unwrap_or(crate::tenant::DEFAULT_PROJECT);
-                if let Err(e) = store.save(project, &result) {
-                    tracing::warn!(execution_id, error = %e, "failed to persist execution result");
-                }
-            }
-        }
-    }
-
     /// Submit a task for execution after verifying its capability grants.
     pub async fn submit(&self, task: ExecutionTask) -> Result<String, String> {
         let verifier = self
@@ -169,7 +184,6 @@ impl ExecutorDaemon {
         let project_id = task.project_id.clone().unwrap_or_else(|| crate::tenant::DEFAULT_PROJECT.to_string());
         let store_key = Self::project_key(Some(&project_id), &task.execution_id);
 
-        let project_id = task.project_id.clone().unwrap_or_else(|| crate::tenant::DEFAULT_PROJECT.to_string());
         let result = ExecutionResult {
             execution_id: task.execution_id.clone(),
             project_id: Some(project_id.clone()),

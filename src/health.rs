@@ -228,12 +228,12 @@ pub async fn health() -> impl IntoResponse {
     )
 }
 
-/// `GET /ready` — returns 200 only when the executor daemon is running.
+/// `GET /ready` — returns 200 only when the executor daemon is running and
+/// the persistent store is reachable.
 pub async fn ready(State(state): State<crate::server::AppState>) -> impl IntoResponse {
-    // The daemon is considered ready if it was started and has not been
-    // explicitly stopped. We approximate this by checking whether the
-    // background handle is present.
-    if state.vee.is_running().await {
+    let running = state.vee.is_running().await;
+    let db_healthy = state.vee.db_healthy().await;
+    if running && db_healthy {
         (
             StatusCode::OK,
             axum::Json(serde_json::json!({
@@ -338,7 +338,7 @@ mod tests {
         m.counter_inc("foo", 2);
         let rendered = m.render();
         assert!(rendered.contains("# TYPE foo counter"));
-        assert!(rendered.contains("foo{} 3"));
+        assert!(rendered.contains("foo 3"));
     }
 
     #[test]
@@ -348,7 +348,7 @@ mod tests {
         m.gauge_set("bar", 2.5);
         let rendered = m.render();
         assert!(rendered.contains("# TYPE bar gauge"));
-        assert!(rendered.contains("bar{} 2.5"));
+        assert!(rendered.contains("bar 2.5"));
     }
 
     #[test]

@@ -748,6 +748,8 @@ async fn health_ready_and_metrics_endpoints() {
     assert_eq!(metrics.status(), StatusCode::OK);
     let metrics_text = metrics.text().await.unwrap();
     assert!(metrics_text.contains("vee_executions_total"));
+    assert!(metrics_text.contains("vee_requests_total"));
+    assert!(metrics_text.contains("vee_request_duration_seconds_count"));
 
     server.stop().await;
 }

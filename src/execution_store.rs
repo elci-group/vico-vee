@@ -90,6 +90,14 @@ impl ExecutionStore {
         Ok(results)
     }
 
+    /// Return true if the underlying SQLite connection is usable.
+    pub fn ping(&self) -> Result<(), String> {
+        self.conn
+            .execute("SELECT 1", [])
+            .map(|_| ())
+            .map_err(|e| format!("ping execution store: {e}"))
+    }
+
     /// Delete an execution record.
     #[allow(dead_code)]
     pub fn delete(&self, execution_id: &str) -> Result<(), String> {

@@ -363,6 +363,33 @@ impl ExecutorDaemon {
         self.inner.handle.lock().await.is_some()
     }
 
+    /// Return true if the persistent execution store is reachable.
+    ///
+    /// When persistence is disabled this always returns `true`.
+    pub async fn db_healthy(&self) -> bool {
+        if let Some(store) = &self.inner.execution_store {
+            let store = store.clone();
+            match tokio::task::spawn_blocking(move || {
+                let guard = store.lock().unwrap_or_else(|e| e.into_inner());
+                guard.ping().map_err(|e| e.to_string())
+            })
+            .await
+            {
+                Ok(Ok(())) => true,
+                Ok(Err(e)) => {
+                    tracing::warn!(error = %e, "execution store health check failed");
+                    false
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "execution store health check task failed");
+                    false
+                }
+            }
+        } else {
+            true
+        }
+    }
+
     /// Wait for all currently in-flight executions to finish, up to `timeout`.
     ///
     /// Returns `true` if all executions finished before the timeout, and

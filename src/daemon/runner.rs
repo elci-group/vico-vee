@@ -15,12 +15,14 @@ pub(crate) async fn run_execution(
     token: CancellationToken,
 ) {
     let execution_id = task.execution_id.clone();
+    let project_id = task.project_id.clone().unwrap_or_else(|| crate::tenant::DEFAULT_PROJECT.to_string());
+    let store_key = format!("{}/{}", project_id, execution_id);
     let started_at = Utc::now();
 
     // Transition to Executing.
     {
         let mut store = inner.store.write().await;
-        if let Some(result) = store.get_mut(&execution_id) {
+        if let Some(result) = store.get_mut(&store_key) {
             result.status = ExecutionStatus::Executing;
             result.phase = ExecutionPhase::Execution;
             result.started_at = Some(started_at);

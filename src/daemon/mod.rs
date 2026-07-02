@@ -239,20 +239,27 @@ impl ExecutorDaemon {
             .collect()
     }
 
-    /// Return lightweight dashboard statistics.
-    pub async fn dashboard_stats(&self) -> serde_json::Value {
+    /// Return lightweight dashboard statistics, optionally scoped to a project.
+    pub async fn dashboard_stats(&self, project_id: Option<&str>) -> serde_json::Value {
         let store = self.inner.store.read().await;
-        let total = store.len() as i64;
-        let completed = store
-            .values()
+        let project = project_id.unwrap_or(crate::tenant::DEFAULT_PROJECT).to_string();
+        let prefix = format!("{}/", project);
+        let values: Vec<_> = store
+            .iter()
+            .filter(|(k, _)| k.starts_with(&prefix))
+            .map(|(_, v)| v)
+            .collect();
+        let total = values.len() as i64;
+        let completed = values
+            .iter()
             .filter(|r| r.status == ExecutionStatus::Completed)
             .count() as i64;
-        let failed = store
-            .values()
+        let failed = values
+            .iter()
             .filter(|r| r.status == ExecutionStatus::Failed)
             .count() as i64;
-        let pending = store
-            .values()
+        let pending = values
+            .iter()
             .filter(|r| {
                 matches!(
                     r.status,
@@ -261,7 +268,7 @@ impl ExecutorDaemon {
             })
             .count() as i64;
         let avg_latency_ms = if total > 0 {
-            store.values().map(|r| r.latency_ms as i64).sum::<i64>() / total
+            values.iter().map(|r| r.latency_ms as i64).sum::<i64>() / total
         } else {
             0
         };
@@ -283,6 +290,11 @@ impl ExecutorDaemon {
     /// Return the number of currently in-flight executions.
     pub async fn inflight_count(&self) -> usize {
         self.inner.inflight.lock().await.len()
+    }
+
+    /// Return true when the daemon's background pump is running.
+    pub async fn is_running(&self) -> bool {
+        self.inner.handle.lock().await.is_some()
     }
 
     /// Replace the capability verifier used for new executions.

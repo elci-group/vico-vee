@@ -175,10 +175,6 @@ pub fn router(state: AppState) -> Router {
         .with_state(state)
 }
 
-async fn health() -> JsonResponse<serde_json::Value> {
-    JsonResponse(serde_json::json!({"status": "ok", "service": "vico-vee"}))
-}
-
 #[derive(Debug, Deserialize)]
 pub struct VeeSubmitInput {
     run_id: Option<String>,
@@ -192,6 +188,7 @@ pub struct VeeSubmitInput {
 
 pub async fn vee_submit(
     State(state): State<AppState>,
+    project: Option<crate::tenant::ProjectContext>,
     Json(input): Json<VeeSubmitInput>,
 ) -> JsonResponse<serde_json::Value> {
     let language = match input.language.as_str() {
@@ -251,6 +248,7 @@ pub async fn vee_submit(
         source_code: input.source_code,
         capabilities,
         capability_grants,
+        project_id: project.as_ref().map(|p| p.project_id.clone()),
         budget,
         hypothesis: input
             .hypothesis
@@ -279,9 +277,11 @@ pub struct VeeExecutionIdInput {
 
 pub async fn vee_status(
     State(state): State<AppState>,
+    project: Option<crate::tenant::ProjectContext>,
     Json(input): Json<VeeExecutionIdInput>,
 ) -> JsonResponse<serde_json::Value> {
-    match state.vee.get_status(&input.execution_id).await {
+    let project_id = project.as_ref().map(|p| p.project_id.as_str());
+    match state.vee.get_status(&input.execution_id, project_id).await {
         Some(result) => JsonResponse(serde_json::json!({ "success": true, "data": result })),
         None => JsonResponse(serde_json::json!({
             "success": false,
@@ -292,9 +292,11 @@ pub async fn vee_status(
 
 pub async fn vee_cancel(
     State(state): State<AppState>,
+    project: Option<crate::tenant::ProjectContext>,
     Json(input): Json<VeeExecutionIdInput>,
 ) -> JsonResponse<serde_json::Value> {
-    match state.vee.cancel(&input.execution_id).await {
+    let project_id = project.as_ref().map(|p| p.project_id.as_str());
+    match state.vee.cancel(&input.execution_id, project_id).await {
         Ok(()) => JsonResponse(serde_json::json!({
             "success": true,
             "execution_id": input.execution_id,
@@ -323,8 +325,10 @@ pub fn default_vee_limit() -> usize {
 
 pub async fn vee_list(
     State(state): State<AppState>,
+    project: Option<crate::tenant::ProjectContext>,
     Json(input): Json<VeeListInput>,
 ) -> JsonResponse<serde_json::Value> {
+    let project_id = project.as_ref().map(|p| p.project_id.as_str());
     let status_filter = input.status.and_then(|s| match s.as_str() {
         "pending" => Some(crate::types::ExecutionStatus::Pending),
         "queued" => Some(crate::types::ExecutionStatus::Queued),
@@ -335,7 +339,7 @@ pub async fn vee_list(
         _ => None,
     });
 
-    let mut results = state.vee.list(status_filter).await;
+    let mut results = state.vee.list(status_filter, project_id).await;
     results.truncate(input.limit);
 
     JsonResponse(serde_json::json!({ "success": true, "data": results }))
@@ -343,9 +347,11 @@ pub async fn vee_list(
 
 pub async fn vee_artifacts(
     State(state): State<AppState>,
+    project: Option<crate::tenant::ProjectContext>,
     Json(input): Json<VeeExecutionIdInput>,
 ) -> JsonResponse<serde_json::Value> {
-    let artifacts = state.vee.get_artifacts(&input.execution_id).await;
+    let project_id = project.as_ref().map(|p| p.project_id.as_str());
+    let artifacts = state.vee.get_artifacts(&input.execution_id, project_id).await;
     let artifacts_json: Vec<serde_json::Value> = artifacts
         .into_iter()
         .map(|(id, artifact)| {
@@ -362,8 +368,12 @@ pub async fn vee_artifacts(
     }))
 }
 
-pub async fn vee_dashboard(State(state): State<AppState>) -> JsonResponse<serde_json::Value> {
-    let stats = state.vee.dashboard_stats().await;
+pub async fn vee_dashboard(
+    State(state): State<AppState>,
+    project: Option<crate::tenant::ProjectContext>,
+) -> JsonResponse<serde_json::Value> {
+    let project_id = project.as_ref().map(|p| p.project_id.as_str());
+    let stats = state.vee.dashboard_stats(project_id).await;
     JsonResponse(serde_json::json!({ "success": true, "data": stats }))
 }
 

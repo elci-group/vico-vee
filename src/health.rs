@@ -74,10 +74,7 @@ impl MetricsRegistry {
 
     /// Update gauges derived from the current execution store.
     pub async fn refresh_daemon_gauges(&self, state: &crate::server::AppState) {
-        let stats = state
-            .vee
-            .dashboard_stats(Some(crate::tenant::DEFAULT_PROJECT))
-            .await;
+        let stats = state.vee.dashboard_stats(None).await;
         if let Some(total) = stats.get("total").and_then(|v| v.as_i64()) {
             self.gauge_set("vee_executions_total", total as f64);
         }
@@ -109,8 +106,7 @@ pub async fn ready(State(state): State<crate::server::AppState>) -> impl IntoRes
     // The daemon is considered ready if it was started and has not been
     // explicitly stopped. We approximate this by checking whether the
     // background handle is present.
-    let handle_set = state.vee.handle_set().await;
-    if handle_set {
+    if state.vee.is_running().await {
         (
             StatusCode::OK,
             axum::Json(serde_json::json!({

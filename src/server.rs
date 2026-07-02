@@ -41,8 +41,7 @@ pub struct AppState {
 }
 
 impl AppState {
-    /// Create an `AppState` for unit tests without async setup.
-    #[cfg(test)]
+    /// Create an `AppState` for tests without async setup.
     pub fn test_new(config: Config) -> Self {
         use crate::capability::CapabilityRegistry;
         use std::sync::Arc;

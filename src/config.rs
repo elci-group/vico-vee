@@ -282,6 +282,18 @@ pub struct Cli {
     /// Seconds to wait for in-flight executions during graceful shutdown.
     #[arg(long, env = "VICO_VEE_SHUTDOWN_GRACE_PERIOD_SECS")]
     pub shutdown_grace_period_secs: Option<u64>,
+
+    /// Create a backup tarball and exit.
+    #[arg(long, group = "lifecycle")]
+    pub backup: bool,
+
+    /// Output path for --backup (defaults to a timestamped file in the current directory).
+    #[arg(long, requires = "backup")]
+    pub backup_output: Option<PathBuf>,
+
+    /// Restore from a backup tarball and exit.
+    #[arg(long, group = "lifecycle", value_name = "ARCHIVE")]
+    pub restore: Option<PathBuf>,
 }
 
 impl Config {

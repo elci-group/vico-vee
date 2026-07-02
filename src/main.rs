@@ -4,12 +4,29 @@
 //! (or any other client) can reach over a well-defined REST API.
 
 use clap::Parser;
+use std::path::PathBuf;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use vico_vee::config::{Cli, Config, LogFormat};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
+
+    // CLI-only commands: run and exit.
+    if let Some(maybe_path) = cli.generate_admin_key {
+        let target = maybe_path.unwrap_or_else(|| {
+            cli.config_dir
+                .clone()
+                .or_else(|| std::env::var("VICO_VEE_CONFIG_DIR").ok().map(PathBuf::from))
+                .unwrap_or_else(crate::paths::vee_config_dir)
+                .join("api_keys.toml")
+        });
+        let token = generate_admin_key(&target)?;
+        println!("generated admin API key: {token}");
+        println!("wrote {target}", target = target.display());
+        return Ok(());
+    }
+
     let config = Config::load(Some(cli.clone()))?;
 
     // CLI-only commands: run and exit.

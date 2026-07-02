@@ -474,6 +474,9 @@ impl Config {
             self.api_keys_file = v;
             self.api_keys.file = self.api_keys_file.clone();
         }
+        if let Some(v) = cli.require_auth {
+            self.api_keys.require_auth = v;
+        }
         if let Some(v) = cli.body_limit_mb {
             self.body_limit_mb = v;
         }

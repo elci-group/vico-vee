@@ -51,23 +51,37 @@ pub enum AuthError {
 
 impl AuthKeys {
     /// Load keys from config: env override first, then the keys file.
+    ///
+    /// When `require_auth` is `true` and no keys are configured, this returns
+    /// an error so the service fails closed instead of silently disabling auth.
     pub fn load(config: &crate::config::ApiKeysConfig) -> Result<Self, String> {
-        if let Some(env) = &config.env_override {
+        let file = if let Some(env) = &config.env_override {
             let file: ApiKeysFile =
                 toml::from_str(env).map_err(|e| format!("VICO_VEE_API_KEYS: {e}"))?;
-            return Self::from_file(file, config.require_auth);
-        }
-
-        if config.file.exists() {
+            Some(file)
+        } else if config.file.exists() {
             let text = std::fs::read_to_string(&config.file)
                 .map_err(|e| format!("read {}: {}", config.file.display(), e))?;
             let file: ApiKeysFile = toml::from_str(&text)
                 .map_err(|e| format!("parse {}: {}", config.file.display(), e))?;
+            Some(file)
+        } else {
+            None
+        };
+
+        if let Some(file) = file {
             Self::from_file(file, config.require_auth)
+        } else if config.require_auth {
+            Err(format!(
+                "authentication is required but no API keys were found at {}. \
+                 Generate a key with: vico-vee --generate-admin-key {}",
+                config.file.display(),
+                config.file.display()
+            ))
         } else {
             Ok(Self {
                 keys: HashMap::new(),
-                require_auth: false, // No keys configured -> auth disabled to avoid lockout.
+                require_auth: false,
             })
         }
     }
@@ -92,10 +106,14 @@ impl AuthKeys {
                 },
             );
         }
-        let has_keys = !map.is_empty();
+        if require_auth && map.is_empty() {
+            return Err(
+                "authentication is required but the API-keys file contains no keys".to_string(),
+            );
+        }
         Ok(Self {
             keys: map,
-            require_auth: require_auth && has_keys,
+            require_auth,
         })
     }
 

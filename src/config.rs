@@ -52,6 +52,10 @@ pub struct Config {
     #[serde(default = "default_api_keys_file")]
     pub api_keys_file: PathBuf,
 
+    /// API-key authentication configuration.
+    #[serde(default)]
+    pub api_keys: ApiKeysConfig,
+
     /// Maximum request body size in megabytes.
     #[serde(default = "default_body_limit_mb")]
     pub body_limit_mb: usize,
@@ -59,6 +63,10 @@ pub struct Config {
     /// Request handling timeout in seconds.
     #[serde(default = "default_request_timeout_secs")]
     pub request_timeout_secs: u64,
+
+    /// Rate limit: requests per second per IP.
+    #[serde(default)]
+    pub rate_limit: RateLimitConfig,
 
     /// Rate limit: requests per second per IP.
     #[serde(default = "default_rate_limit_per_sec")]

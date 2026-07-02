@@ -18,6 +18,7 @@ pub(crate) async fn run_execution(
     let project_id = task.project_id.clone().unwrap_or_else(|| crate::tenant::DEFAULT_PROJECT.to_string());
     let store_key = format!("{}/{}", project_id, execution_id);
     let started_at = Utc::now();
+    let project_id_for_persist = project_id.clone();
 
     // Transition to Executing.
     {
@@ -28,6 +29,9 @@ pub(crate) async fn run_execution(
             result.started_at = Some(started_at);
         }
     }
+    inner
+        .persist_result(Some(&project_id_for_persist), &execution_id)
+        .await;
     emit_event(
         &inner,
         "started",
@@ -40,7 +44,7 @@ pub(crate) async fn run_execution(
     );
 
     if token.is_cancelled() {
-        mark_cancelled(&inner, &store_key).await;
+        mark_cancelled(&inner, &store_key, &project_id_for_persist).await;
         inner.inflight.lock().await.remove(&execution_id);
         return;
     }
@@ -70,7 +74,7 @@ pub(crate) async fn run_execution(
     }
 
     if token.is_cancelled() {
-        mark_cancelled(&inner, &store_key).await;
+        mark_cancelled(&inner, &store_key, &project_id_for_persist).await;
         inner.inflight.lock().await.remove(&execution_id);
         return;
     }
@@ -80,7 +84,7 @@ pub(crate) async fn run_execution(
     let result = tokio::select! {
         biased;
         _ = token.cancelled() => {
-            mark_cancelled(&inner, &store_key).await;
+            mark_cancelled(&inner, &store_key, &project_id_for_persist).await;
             inner.inflight.lock().await.remove(&execution_id);
             return;
         }
@@ -145,21 +149,28 @@ pub(crate) async fn run_execution(
                     "artifact_count": artifact_count,
                 }),
             );
+            inner
+                .persist_result(Some(&project_id_for_persist), &execution_id)
+                .await;
         }
         Err(err) => {
             mark_failed(
                 &inner,
                 &store_key,
+                &project_id_for_persist,
                 format!("{}: {}", err.code, err.message),
             )
             .await;
         }
     }
 
+    inner
+        .persist_result(Some(&project_id_for_persist), &execution_id)
+        .await;
     inner.inflight.lock().await.remove(&execution_id);
 }
 
-async fn mark_failed(inner: &Inner, store_key: &str, message: String) {
+async fn mark_failed(inner: &Inner, store_key: &str, project_id: &str, message: String) {
     let completed_at = Utc::now();
     let latency_ms = inner
         .store
@@ -179,6 +190,7 @@ async fn mark_failed(inner: &Inner, store_key: &str, message: String) {
             result.latency_ms = latency_ms;
         }
     }
+    inner.persist_result(Some(project_id), execution_id(store_key)).await;
     emit_event(
         inner,
         "failed",
@@ -187,7 +199,14 @@ async fn mark_failed(inner: &Inner, store_key: &str, message: String) {
     );
 }
 
-async fn mark_cancelled(inner: &Inner, store_key: &str) {
+fn execution_id(store_key: &str) -> &str {
+    store_key
+        .rsplit_once('/')
+        .map(|(_, id)| id)
+        .unwrap_or(store_key)
+}
+
+async fn mark_cancelled(inner: &Inner, store_key: &str, project_id: &str) {
     {
         let mut store = inner.store.write().await;
         if let Some(result) = store.get_mut(store_key) {
@@ -195,6 +214,7 @@ async fn mark_cancelled(inner: &Inner, store_key: &str) {
             result.completed_at = Some(Utc::now());
         }
     }
+    inner.persist_result(Some(project_id), execution_id(store_key)).await;
     emit_event(inner, "cancelled", store_key, json!({}));
 }
 

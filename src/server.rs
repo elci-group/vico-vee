@@ -399,6 +399,51 @@ pub async fn vee_odin_set_model(
     JsonResponse(serde_json::json!({ "success": true, "message": "ODIN model updated" }))
 }
 
+/// Stream VEE execution events over a WebSocket connection.
+pub async fn vee_events(State(state): State<AppState>, ws: WebSocketUpgrade) -> Response {
+    ws.on_upgrade(move |socket| handle_vee_events(socket, state))
+}
+
+async fn handle_vee_events(mut socket: WebSocket, state: AppState) {
+    let mut rx = state.vee.subscribe_events();
+    while let Ok(event) = rx.recv().await {
+        let text = match serde_json::to_string(&event) {
+            Ok(json) => json,
+            Err(e) => {
+                tracing::warn!(error = %e, "failed to serialize vee event");
+                continue;
+            }
+        };
+        if socket
+            .send(axum::extract::ws::Message::Text(text.into()))
+            .await
+            .is_err()
+        {
+            break;
+        }
+    }
+}
+
+/// Rotate the capability signing key (requires the `admin` scope).
+pub async fn vee_admin_rotate_key(
+    State(state): State<AppState>,
+) -> JsonResponse<serde_json::Value> {
+    let mut issuer = state.capability_issuer.lock().await;
+    match issuer.rotate_key() {
+        Ok(()) => {
+            state.vee.update_verifier(issuer.verifier());
+            JsonResponse(serde_json::json!({
+                "success": true,
+                "message": "Capability signing key rotated",
+            }))
+        }
+        Err(e) => JsonResponse(serde_json::json!({
+            "success": false,
+            "error": e,
+        })),
+    }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Osmosis — Patch review lifecycle
 // ─────────────────────────────────────────────────────────────────────────────

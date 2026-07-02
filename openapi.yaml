@@ -78,6 +78,18 @@ paths:
       responses:
         "200":
           description: ODIN model updated
+  /vee/events:
+    get:
+      summary: Stream VEE execution events
+      responses:
+        "101":
+          description: WebSocket upgrade
+  /vee/admin/rotate-key:
+    post:
+      summary: Rotate capability signing key
+      responses:
+        "200":
+          description: Signing key rotated
   /vee/diff:
     post:
       summary: Request an Osmosis diff

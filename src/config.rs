@@ -104,7 +104,7 @@ impl Default for ApiKeysConfig {
     fn default() -> Self {
         Self {
             file: default_api_keys_file(),
-            env_override: std::env::var("VICO_VEE_API_KEYS").ok(),
+            env_override: None,
             require_auth: false,
         }
     }
@@ -162,6 +162,7 @@ impl Default for Config {
             tls_cert: None,
             tls_key: None,
             api_keys_file: default_api_keys_file(),
+            api_keys: ApiKeysConfig::default(),
             body_limit_mb: default_body_limit_mb(),
             request_timeout_secs: default_request_timeout_secs(),
             rate_limit_per_sec: default_rate_limit_per_sec(),

@@ -344,11 +344,10 @@ pub async fn vee_list(
 
 pub async fn vee_artifacts(
     State(state): State<AppState>,
-    project: Option<crate::tenant::ProjectContext>,
+    project: crate::tenant::ProjectContext,
     Json(input): Json<VeeExecutionIdInput>,
 ) -> JsonResponse<serde_json::Value> {
-    let project_id = project.as_ref().map(|p| p.project_id.as_str());
-    let artifacts = state.vee.get_artifacts(&input.execution_id, project_id).await;
+    let artifacts = state.vee.get_artifacts(&input.execution_id, Some(&project.project_id)).await;
     let artifacts_json: Vec<serde_json::Value> = artifacts
         .into_iter()
         .map(|(id, artifact)| {

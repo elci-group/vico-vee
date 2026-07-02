@@ -117,9 +117,15 @@ pub fn router(state: AppState) -> Router {
         .route("/vee/checkpoints", post(vee_checkpoints))
         .route("/vee/odin/health", post(vee_odin_health))
         .route("/vee/odin/model", post(vee_odin_set_model))
+        .route("/vee/events", get(vee_events))
+        .route("/vee/admin/rotate-key", post(vee_admin_rotate_key))
         .route("/vee/diff", post(vee_diff))
         .route("/vee/merge", post(vee_merge))
         .route("/vee/reject", post(vee_reject))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            crate::auth::auth_middleware,
+        ))
         .with_state(state)
 }
 

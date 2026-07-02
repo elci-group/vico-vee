@@ -149,7 +149,7 @@ pub(crate) async fn run_execution(
         Err(err) => {
             mark_failed(
                 &inner,
-                &execution_id,
+                &store_key,
                 format!("{}: {}", err.code, err.message),
             )
             .await;
@@ -159,20 +159,20 @@ pub(crate) async fn run_execution(
     inner.inflight.lock().await.remove(&execution_id);
 }
 
-async fn mark_failed(inner: &Inner, execution_id: &str, message: String) {
+async fn mark_failed(inner: &Inner, store_key: &str, message: String) {
     let completed_at = Utc::now();
     let latency_ms = inner
         .store
         .read()
         .await
-        .get(execution_id)
+        .get(store_key)
         .and_then(|r| r.started_at)
         .map(|s| (completed_at - s).num_milliseconds().max(0).unsigned_abs())
         .unwrap_or(0);
 
     {
         let mut store = inner.store.write().await;
-        if let Some(result) = store.get_mut(execution_id) {
+        if let Some(result) = store.get_mut(store_key) {
             result.status = ExecutionStatus::Failed;
             result.error_log = Some(message.clone());
             result.completed_at = Some(completed_at);
@@ -182,20 +182,20 @@ async fn mark_failed(inner: &Inner, execution_id: &str, message: String) {
     emit_event(
         inner,
         "failed",
-        execution_id,
+        store_key,
         json!({ "error": message, "latency_ms": latency_ms }),
     );
 }
 
-async fn mark_cancelled(inner: &Inner, execution_id: &str) {
+async fn mark_cancelled(inner: &Inner, store_key: &str) {
     {
         let mut store = inner.store.write().await;
-        if let Some(result) = store.get_mut(execution_id) {
+        if let Some(result) = store.get_mut(store_key) {
             result.status = ExecutionStatus::Cancelled;
             result.completed_at = Some(Utc::now());
         }
     }
-    emit_event(inner, "cancelled", execution_id, json!({}));
+    emit_event(inner, "cancelled", store_key, json!({}));
 }
 
 fn emit_event(inner: &Inner, event: &str, execution_id: &str, payload: serde_json::Value) {

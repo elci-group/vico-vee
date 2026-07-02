@@ -51,7 +51,20 @@ pub(crate) async fn run_execution(
 
     // Build worker and artifact store.
     let artifact_store = Arc::new(ArtifactStore::default());
-    let mut worker = create_worker(task.language.clone(), artifact_store.clone());
+    let mut worker = match create_worker(task.language.clone(), artifact_store.clone()) {
+        Ok(w) => w,
+        Err(e) => {
+            mark_failed(
+                &inner,
+                &store_key,
+                &project_id_for_persist,
+                format!("unsupported language: {}", e),
+            )
+            .await;
+            inner.inflight.lock().await.remove(&execution_id);
+            return;
+        }
+    };
 
     let verifier = inner
         .verifier
@@ -98,7 +111,7 @@ pub(crate) async fn run_execution(
     };
 
     match result {
-        Ok(artifacts) => {
+        Ok(output) => {
             let completed_at = Utc::now();
             let latency_ms = (completed_at - started_at)
                 .num_milliseconds()
@@ -108,7 +121,7 @@ pub(crate) async fn run_execution(
             // Extract telemetry from the sandbox metadata artifact if present.
             let mut cpu_seconds_used = 0.0f64;
             let mut memory_peak_mb = 0.0f64;
-            for artifact in &artifacts {
+            for artifact in &output.artifacts {
                 if let Artifact::Json { value, .. } = artifact {
                     if let Some(ms) = value.get("duration_ms").and_then(|v| v.as_u64()) {
                         cpu_seconds_used = ms as f64 / 1000.0;
@@ -119,11 +132,25 @@ pub(crate) async fn run_execution(
                 }
             }
 
+            // Validate against the stated hypothesis, if any.
+            let validation = task.hypothesis.as_ref().map(|hypothesis| {
+                crate::validation::validate_artifacts(
+                    &output.artifacts,
+                    hypothesis,
+                    &output.stderr,
+                    output.exit_code,
+                )
+            });
+            let confidence = validation
+                .as_ref()
+                .map(|v| v.confidence)
+                .unwrap_or(1.0);
+
             // Persist artifacts and keep them on the result.
             let mut provenance = task.provenance.clone();
             provenance.execution_id = execution_id.clone();
-            let mut stored_artifacts = Vec::with_capacity(artifacts.len());
-            for artifact in artifacts {
+            let mut stored_artifacts = Vec::with_capacity(output.artifacts.len());
+            for artifact in output.artifacts {
                 // Persistence is best-effort; the artifact is still part of the
                 // execution result even if the store write fails.
                 let _ = artifact_store
@@ -133,12 +160,32 @@ pub(crate) async fn run_execution(
             }
             let artifact_count = stored_artifacts.len();
 
+            // Extract and persist a pattern from successful executions.
+            if let Some(pattern_store) = &inner.pattern_store {
+                if let Some(hypothesis) = &task.hypothesis {
+                    let pattern = crate::validation::extract_pattern(
+                        &execution_id,
+                        &task.source_code,
+                        &task.language,
+                        hypothesis,
+                        &stored_artifacts,
+                        latency_ms,
+                        0,
+                    );
+                    if let Ok(mut store) = pattern_store.lock() {
+                        store.store(pattern);
+                    }
+                }
+            }
+
             {
                 let mut store = inner.store.write().await;
                 if let Some(result) = store.get_mut(&store_key) {
                     result.status = ExecutionStatus::Completed;
                     result.phase = ExecutionPhase::Validation;
                     result.artifacts = stored_artifacts;
+                    result.validation = validation;
+                    result.confidence = confidence;
                     result.completed_at = Some(completed_at);
                     result.latency_ms = latency_ms;
                     result.cpu_seconds_used = cpu_seconds_used;
@@ -153,6 +200,7 @@ pub(crate) async fn run_execution(
                     "latency_ms": latency_ms,
                     "cpu_seconds_used": cpu_seconds_used,
                     "artifact_count": artifact_count,
+                    "confidence": confidence,
                 }),
             );
             inner

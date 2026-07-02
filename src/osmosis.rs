@@ -565,6 +565,7 @@ mod tests {
                 paths: vec!["*".into()],
             }],
             capability_grants: vec![],
+            project_id: None,
             budget: ExecutionBudget {
                 cpu_seconds: 1,
                 memory_mb: 64,

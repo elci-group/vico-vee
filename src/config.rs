@@ -96,6 +96,19 @@ pub struct RateLimitConfig {
     /// Maximum execution burst per agent_id.
     #[serde(default = "default_exec_rate_limit_burst")]
     pub exec_burst: u32,
+
+    /// Execution submissions per second per project_id.
+    #[serde(default = "default_project_rate_limit_per_sec")]
+    pub project_per_sec: u32,
+
+    /// Maximum execution burst per project_id.
+    #[serde(default = "default_project_rate_limit_burst")]
+    pub project_burst: u32,
+
+    /// CIDRs of trusted reverse proxies. When the direct peer IP matches one of
+    /// these, the `X-Forwarded-For` header is used to determine the client IP.
+    #[serde(default)]
+    pub trusted_proxy_cidrs: Vec<String>,
 }
 
 impl Default for RateLimitConfig {
@@ -105,6 +118,9 @@ impl Default for RateLimitConfig {
             burst: default_rate_limit_burst(),
             exec_per_sec: default_exec_rate_limit_per_sec(),
             exec_burst: default_exec_rate_limit_burst(),
+            project_per_sec: default_project_rate_limit_per_sec(),
+            project_burst: default_project_rate_limit_burst(),
+            trusted_proxy_cidrs: vec![],
         }
     }
 }
@@ -198,6 +214,14 @@ fn default_exec_rate_limit_per_sec() -> u32 {
 }
 
 fn default_exec_rate_limit_burst() -> u32 {
+    30
+}
+
+fn default_project_rate_limit_per_sec() -> u32 {
+    10
+}
+
+fn default_project_rate_limit_burst() -> u32 {
     30
 }
 
@@ -299,6 +323,18 @@ pub struct Cli {
     /// Execution rate limit: maximum burst per agent_id.
     #[arg(long, env = "VICO_VEE_EXEC_RATE_LIMIT_BURST")]
     pub exec_rate_limit_burst: Option<u32>,
+
+    /// Project rate limit: submissions per second per project_id.
+    #[arg(long, env = "VICO_VEE_PROJECT_RATE_LIMIT_PER_SEC")]
+    pub project_rate_limit_per_sec: Option<u32>,
+
+    /// Project rate limit: maximum burst per project_id.
+    #[arg(long, env = "VICO_VEE_PROJECT_RATE_LIMIT_BURST")]
+    pub project_rate_limit_burst: Option<u32>,
+
+    /// Comma-separated CIDRs of trusted reverse proxies.
+    #[arg(long, env = "VICO_VEE_TRUSTED_PROXY_CIDRS", value_delimiter = ',')]
+    pub trusted_proxy_cidrs: Option<Vec<String>>,
 
     /// Seconds to wait for in-flight executions during graceful shutdown.
     #[arg(long, env = "VICO_VEE_SHUTDOWN_GRACE_PERIOD_SECS")]
@@ -443,6 +479,20 @@ impl Config {
                 .parse()
                 .map_err(|e| format!("VICO_VEE_EXEC_RATE_LIMIT_BURST: {e}"))?;
         }
+        if let Ok(v) = std::env::var("VICO_VEE_PROJECT_RATE_LIMIT_PER_SEC") {
+            self.rate_limit.project_per_sec = v
+                .parse()
+                .map_err(|e| format!("VICO_VEE_PROJECT_RATE_LIMIT_PER_SEC: {e}"))?;
+        }
+        if let Ok(v) = std::env::var("VICO_VEE_PROJECT_RATE_LIMIT_BURST") {
+            self.rate_limit.project_burst = v
+                .parse()
+                .map_err(|e| format!("VICO_VEE_PROJECT_RATE_LIMIT_BURST: {e}"))?;
+        }
+        if let Ok(v) = std::env::var("VICO_VEE_TRUSTED_PROXY_CIDRS") {
+            self.rate_limit.trusted_proxy_cidrs =
+                v.split(',').map(|s| s.trim().to_string()).collect();
+        }
         if let Ok(v) = std::env::var("VICO_VEE_SHUTDOWN_GRACE_PERIOD_SECS") {
             self.shutdown_grace_period_secs = v
                 .parse()
@@ -506,6 +556,15 @@ impl Config {
         }
         if let Some(v) = cli.exec_rate_limit_burst {
             self.rate_limit.exec_burst = v;
+        }
+        if let Some(v) = cli.project_rate_limit_per_sec {
+            self.rate_limit.project_per_sec = v;
+        }
+        if let Some(v) = cli.project_rate_limit_burst {
+            self.rate_limit.project_burst = v;
+        }
+        if let Some(v) = cli.trusted_proxy_cidrs {
+            self.rate_limit.trusted_proxy_cidrs = v;
         }
         if let Some(v) = cli.shutdown_grace_period_secs {
             self.shutdown_grace_period_secs = v;

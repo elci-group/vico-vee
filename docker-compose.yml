@@ -1,0 +1,38 @@
+services:
+  vico-vee:
+    build: .
+    image: ghcr.io/elci-group/vico-vee:latest
+    container_name: vico-vee
+    ports:
+      - "9987:9987"
+    volumes:
+      - vico-vee-data:/data
+      - ./config:/config:ro
+    environment:
+      - VICO_VEE_BIND=0.0.0.0
+      - VICO_VEE_PORT=9987
+      - VICO_VEE_DATA_DIR=/data
+      - VICO_VEE_CONFIG_DIR=/config
+      - VICO_VEE_OLLAMA_URL=http://ollama:11434
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9987/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    depends_on:
+      - ollama
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: vico-vee-ollama
+    volumes:
+      - ollama-data:/root/.ollama
+    ports:
+      - "11434:11434"
+    restart: unless-stopped
+
+volumes:
+  vico-vee-data:
+  ollama-data:

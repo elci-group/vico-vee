@@ -167,7 +167,6 @@ pub async fn ip_rate_limit_middleware(
         .get::<ConnectInfo<SocketAddr>>()
         .map(|c| c.0);
     let ip = state.rate_limiter.client_ip(&req, peer);
-    eprintln!("DEBUG rate limit peer={:?} extracted_ip={}", peer, ip);
     if let Err(retry_after) = state.rate_limiter.check_ip(&ip) {
         return Ok(add_retry_after(
             StatusCode::TOO_MANY_REQUESTS.into_response(),

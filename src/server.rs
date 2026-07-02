@@ -11,6 +11,7 @@ use axum::{
     Router,
 };
 use tower_http::limit::RequestBodyLimitLayer;
+use tower_http::timeout::TimeoutLayer;
 use serde::Deserialize;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -213,6 +214,10 @@ pub fn router(state: AppState) -> Router {
         ))
         .layer(RequestBodyLimitLayer::new(
             state.config.body_limit_mb * 1024 * 1024,
+        ))
+        .layer(TimeoutLayer::with_status_code(
+            axum::http::StatusCode::REQUEST_TIMEOUT,
+            std::time::Duration::from_secs(state.config.request_timeout_secs.max(1)),
         ))
         .layer(middleware::from_fn(crate::health::set_request_id))
         .layer(middleware::from_fn_with_state(

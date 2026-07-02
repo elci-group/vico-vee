@@ -87,9 +87,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         vico_vee::tls::serve_https(listener, app, tls_reloader, shutdown).await?;
     } else {
         tracing::info!(bind = %config.bind, port = config.port, "vico-vee listening");
-        axum::serve(listener, app)
-            .with_graceful_shutdown(shutdown)
-            .await?;
+        axum::serve(
+            listener,
+            app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+        )
+        .with_graceful_shutdown(shutdown)
+        .await?;
     }
 
     // Stop accepting new requests and wait for in-flight executions to finish.

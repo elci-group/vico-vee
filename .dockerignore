@@ -11,6 +11,8 @@ config/
 # Version control
 .git/
 .gitignore
+.kaptaind/
+.kimi-code/
 
 # IDE and editor files
 .vscode/

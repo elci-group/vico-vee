@@ -185,6 +185,9 @@ async fn large_artifact_upload_download_round_trip() {
         burst: 1000,
         exec_per_sec: 1000,
         exec_burst: 1000,
+        project_per_sec: 1000,
+        project_burst: 1000,
+        trusted_proxy_cidrs: vec![],
     };
     let server = spawn_server(config).await;
     let client = Client::new();

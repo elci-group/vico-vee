@@ -82,6 +82,9 @@ pub fn test_config(tmp: &TempDir) -> Config {
             burst: 1000,
             exec_per_sec: 1000,
             exec_burst: 1000,
+            project_per_sec: 1000,
+            project_burst: 1000,
+            trusted_proxy_cidrs: vec![],
         },
         shutdown_grace_period_secs: 30,
         ..Config::default()
@@ -103,10 +106,13 @@ pub async fn spawn_server(config: Config) -> TestServer {
     let shutdown = CancellationToken::new();
     let shutdown_clone = shutdown.clone();
     let handle = tokio::spawn(async move {
-        axum::serve(listener, app)
-            .with_graceful_shutdown(shutdown_clone.cancelled_owned())
-            .await
-            .expect("server failed");
+        axum::serve(
+            listener,
+            app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+        )
+        .with_graceful_shutdown(shutdown_clone.cancelled_owned())
+        .await
+        .expect("server failed");
     });
 
     // Give the server a moment to start accepting connections.

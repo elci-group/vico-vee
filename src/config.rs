@@ -310,6 +310,10 @@ impl Config {
         }
         if let Ok(v) = std::env::var("VICO_VEE_API_KEYS_FILE") {
             self.api_keys_file = PathBuf::from(v);
+            self.api_keys.file = self.api_keys_file.clone();
+        }
+        if let Ok(v) = std::env::var("VICO_VEE_API_KEYS") {
+            self.api_keys.env_override = Some(v);
         }
         if let Ok(v) = std::env::var("VICO_VEE_BODY_LIMIT_MB") {
             self.body_limit_mb = v
@@ -364,6 +368,7 @@ impl Config {
         }
         if let Some(v) = cli.api_keys_file {
             self.api_keys_file = v;
+            self.api_keys.file = self.api_keys_file.clone();
         }
         if let Some(v) = cli.body_limit_mb {
             self.body_limit_mb = v;

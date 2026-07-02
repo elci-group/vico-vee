@@ -30,7 +30,7 @@ pub struct ExecutorDaemon {
 
 pub(crate) struct Inner {
     pub(crate) store: RwLock<HashMap<String, ExecutionResult>>,
-    pub(crate) verifier: CapabilityVerifier,
+    pub(crate) verifier: std::sync::RwLock<CapabilityVerifier>,
     pub(crate) cancel: CancellationToken,
     pub(crate) handle: Mutex<Option<JoinHandle<()>>>,
     pub(crate) event_tx: broadcast::Sender<serde_json::Value>,
@@ -60,7 +60,7 @@ impl ExecutorDaemon {
         Self {
             inner: Arc::new(Inner {
                 store: RwLock::new(HashMap::new()),
-                verifier,
+                verifier: std::sync::RwLock::new(verifier),
                 cancel: CancellationToken::new(),
                 handle: Mutex::new(None),
                 event_tx,
@@ -100,7 +100,13 @@ impl ExecutorDaemon {
 
     /// Submit a task for execution after verifying its capability grants.
     pub async fn submit(&self, task: ExecutionTask) -> Result<String, String> {
-        if let Err(e) = self.inner.verifier.verify_grants_for_task(
+        let verifier = self
+            .inner
+            .verifier
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        if let Err(e) = verifier.verify_grants_for_task(
             &task.execution_id,
             &task.capability_grants,
             &task.capabilities,
@@ -241,6 +247,12 @@ impl ExecutorDaemon {
     /// Subscribe to executor events broadcast channel.
     pub fn subscribe_events(&self) -> broadcast::Receiver<serde_json::Value> {
         self.inner.event_tx.subscribe()
+    }
+
+    /// Replace the capability verifier used for new executions.
+    pub fn update_verifier(&self, verifier: CapabilityVerifier) {
+        let mut guard = self.inner.verifier.write().unwrap_or_else(|e| e.into_inner());
+        *guard = verifier;
     }
 }
 

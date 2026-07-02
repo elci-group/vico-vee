@@ -47,11 +47,16 @@ pub(crate) async fn run_execution(
     let artifact_store = Arc::new(ArtifactStore::default());
     let mut worker = create_worker(task.language.clone(), artifact_store.clone());
 
+    let verifier = inner
+        .verifier
+        .read()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone();
     if let Err(e) = worker
         .init(
             &execution_id,
             task.capability_grants.clone(),
-            Arc::new(inner.verifier.clone()),
+            Arc::new(verifier),
             task.capabilities.clone(),
             task.budget.clone(),
         )

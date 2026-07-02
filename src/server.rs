@@ -4,8 +4,10 @@
 //! that ViCo can talk to VEE over HTTP without embedding the executor.
 
 use axum::{
-    extract::{Json, State},
-    response::Json as JsonResponse,
+    extract::{ws::WebSocket, Json, State, WebSocketUpgrade},
+    http::StatusCode,
+    middleware,
+    response::{Json as JsonResponse, Response},
     routing::{get, post},
     Router,
 };
@@ -31,6 +33,7 @@ pub use crate::config::Config;
 pub struct AppState {
     pub vee: Arc<ExecutorDaemon>,
     pub capability_issuer: Arc<Mutex<CapabilityRegistry>>,
+    pub auth_keys: crate::auth::AuthKeys,
     pub config: Config,
 }
 
@@ -63,9 +66,13 @@ impl AppState {
         );
         vee.start().await;
 
+        let auth_keys = crate::auth::AuthKeys::load(&config.api_keys)
+            .map_err(|e| format!("auth keys: {}", e))?;
+
         Ok(Self {
             vee,
             capability_issuer,
+            auth_keys,
             config,
         })
     }
@@ -87,6 +94,8 @@ pub const ROUTES: &[&str] = &[
     "/vee/checkpoints",
     "/vee/odin/health",
     "/vee/odin/model",
+    "/vee/events",
+    "/vee/admin/rotate-key",
     "/vee/diff",
     "/vee/merge",
     "/vee/reject",

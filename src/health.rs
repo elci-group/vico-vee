@@ -15,7 +15,7 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Response},
 };
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write;
 use std::sync::{Arc, Mutex};
 

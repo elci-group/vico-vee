@@ -7,6 +7,7 @@
 
 use crate::capability::{CapabilityRegistry, CapabilityVerifier};
 use crate::execution_store::ExecutionStore;
+use crate::pattern::PatternStore;
 use crate::types::*;
 use chrono::Utc;
 use serde_json::json;
@@ -32,6 +33,7 @@ pub struct ExecutorDaemon {
 pub(crate) struct Inner {
     pub(crate) store: RwLock<HashMap<String, ExecutionResult>>,
     pub(crate) execution_store: Option<Arc<std::sync::Mutex<ExecutionStore>>>,
+    pub(crate) pattern_store: Option<Arc<PatternStore>>,
     pub(crate) verifier: std::sync::RwLock<CapabilityVerifier>,
     pub(crate) cancel: CancellationToken,
     pub(crate) handle: Mutex<Option<JoinHandle<()>>>,
@@ -70,7 +72,7 @@ impl ExecutorDaemon {
     /// Create a daemon using a deterministic in-memory capability verifier.
     pub fn try_new() -> Result<Self, String> {
         let registry = CapabilityRegistry::new_with_seed([0u8; 32]);
-        Self::try_new_with_verifier(registry.verifier(), None)
+        Self::try_new_with_stores(registry.verifier(), None, None)
     }
 
     /// Create a daemon with an explicit capability verifier and optional
@@ -79,25 +81,37 @@ impl ExecutorDaemon {
         verifier: CapabilityVerifier,
         execution_store: Option<ExecutionStore>,
     ) -> Result<Self, String> {
-        let store = execution_store.map(|s| Arc::new(std::sync::Mutex::new(s)));
-        Ok(Self::with_verifier(verifier, store))
+        Self::try_new_with_stores(verifier, execution_store, None)
+    }
+
+    /// Create a daemon with explicit verifier and optional persistent stores.
+    pub fn try_new_with_stores(
+        verifier: CapabilityVerifier,
+        execution_store: Option<ExecutionStore>,
+        pattern_store: Option<PatternStore>,
+    ) -> Result<Self, String> {
+        let execution_store = execution_store.map(|s| Arc::new(std::sync::Mutex::new(s)));
+        let pattern_store = pattern_store.map(Arc::new);
+        Ok(Self::with_stores(verifier, execution_store, pattern_store))
     }
 
     /// Synchronous constructor for callers that do not need async setup.
     pub fn new() -> Self {
         let registry = CapabilityRegistry::new_with_seed([0u8; 32]);
-        Self::with_verifier(registry.verifier(), None)
+        Self::with_stores(registry.verifier(), None, None)
     }
 
-    fn with_verifier(
+    fn with_stores(
         verifier: CapabilityVerifier,
         execution_store: Option<Arc<std::sync::Mutex<ExecutionStore>>>,
+        pattern_store: Option<Arc<PatternStore>>,
     ) -> Self {
         let (event_tx, _event_rx) = broadcast::channel(128);
         Self {
             inner: Arc::new(Inner {
                 store: RwLock::new(HashMap::new()),
                 execution_store,
+                pattern_store,
                 verifier: std::sync::RwLock::new(verifier),
                 cancel: CancellationToken::new(),
                 handle: Mutex::new(None),

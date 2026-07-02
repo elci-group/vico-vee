@@ -1,4 +1,3 @@
-use crate::pattern::PatternStore;
 use crate::types::TaskSignature;
 use serde::{Deserialize, Serialize};
 
@@ -15,15 +14,24 @@ pub struct PatternRecord {
 impl ExecutorDaemon {
     /// Find patterns matching the given task signature.
     pub async fn find_patterns(&self, signature: &TaskSignature) -> Vec<PatternRecord> {
-        let store = PatternStore::new();
-        store
-            .find_matches(signature, 0.5)
-            .into_iter()
-            .map(|p| PatternRecord {
-                pattern_id: p.pattern_id.clone(),
-                description: p.description.clone(),
-                success_rate: p.success_rate,
+        if let Some(store) = &self.inner.pattern_store {
+            let store = store.clone();
+            let signature = signature.clone();
+            let patterns = tokio::task::spawn_blocking(move || {
+                store.find_matches(&signature, 0.5)
             })
-            .collect()
+            .await
+            .unwrap_or_default();
+            patterns
+                .into_iter()
+                .map(|p| PatternRecord {
+                    pattern_id: p.pattern_id,
+                    description: p.description,
+                    success_rate: p.success_rate,
+                })
+                .collect()
+        } else {
+            vec![]
+        }
     }
 }

@@ -4,26 +4,33 @@
 
 use crate::types::*;
 use std::collections::HashMap;
+use std::path::Path;
 
 /// Pattern database backed by an in-memory cache with optional SQLite persistence.
 pub struct PatternStore {
+    inner: std::sync::Mutex<PatternStoreInner>,
+}
+
+struct PatternStoreInner {
     patterns: HashMap<String, ExecutionPattern>,
     db: Option<rusqlite::Connection>,
 }
 
 impl PatternStore {
     pub fn new() -> Self {
-        let mut store = Self {
+        let mut store = PatternStoreInner {
             patterns: HashMap::new(),
             db: None,
         };
         store.seed_builtin_patterns();
-        store
+        Self {
+            inner: std::sync::Mutex::new(store),
+        }
     }
 
     /// Open (or create) a persistent pattern store at the given path.
-    pub fn new_with_path(path: &std::path::Path) -> Result<Self, String> {
-        let mut store = Self {
+    pub fn new_with_path(path: &Path) -> Result<Self, String> {
+        let mut store = PatternStoreInner {
             patterns: HashMap::new(),
             db: None,
         };
@@ -62,25 +69,30 @@ impl PatternStore {
             store.seed_builtin_patterns();
         }
 
-        Ok(store)
+        Ok(Self {
+            inner: std::sync::Mutex::new(store),
+        })
     }
 
     /// Store a new pattern (or update an existing one).
-    pub fn store(&mut self, pattern: ExecutionPattern) {
-        self.patterns
-            .insert(pattern.pattern_id.clone(), pattern.clone());
-        if let Some(db) = &self.db {
+    pub fn store(&self, pattern: ExecutionPattern) {
+        let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        inner.patterns.insert(pattern.pattern_id.clone(), pattern.clone());
+        if let Some(db) = &inner.db {
             let data = serde_json::to_string(&pattern).unwrap_or_default();
-            let _ = db.execute(
+            if let Err(e) = db.execute(
                 "INSERT OR REPLACE INTO patterns (pattern_id, data) VALUES (?1, ?2)",
                 rusqlite::params![&pattern.pattern_id, &data],
-            );
+            ) {
+                tracing::warn!(pattern_id = %pattern.pattern_id, error = %e, "failed to persist pattern");
+            }
         }
     }
 
     /// Retrieve a pattern by ID.
-    pub fn get(&self, pattern_id: &str) -> Option<&ExecutionPattern> {
-        self.patterns.get(pattern_id)
+    pub fn get(&self, pattern_id: &str) -> Option<ExecutionPattern> {
+        let inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        inner.patterns.get(pattern_id).cloned()
     }
 
     /// Find patterns matching a task signature, sorted by success rate.
@@ -88,8 +100,9 @@ impl PatternStore {
         &self,
         signature: &TaskSignature,
         min_similarity: f64,
-    ) -> Vec<&ExecutionPattern> {
-        let mut matches: Vec<&ExecutionPattern> = self
+    ) -> Vec<ExecutionPattern> {
+        let inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let mut matches: Vec<ExecutionPattern> = inner
             .patterns
             .values()
             .filter(|p| {
@@ -99,14 +112,16 @@ impl PatternStore {
                         &signature.intent_keywords,
                     ) >= min_similarity
             })
+            .cloned()
             .collect();
         matches.sort_by(|a, b| b.success_rate.total_cmp(&a.success_rate));
         matches
     }
 
     /// Record a successful execution against a pattern.
-    pub fn record_success(&mut self, pattern_id: &str, latency_ms: u64, tokens: u64) {
-        if let Some(pattern) = self.patterns.get_mut(pattern_id) {
+    pub fn record_success(&self, pattern_id: &str, latency_ms: u64, tokens: u64) {
+        let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(pattern) = inner.patterns.get_mut(pattern_id) {
             pattern.usage_count += 1;
             // Update rolling average success rate
             let n = pattern.usage_count as f64;
@@ -116,49 +131,64 @@ impl PatternStore {
             pattern.avg_cost.cpu_seconds = latency_ms / 1000;
             pattern.avg_cost.token_budget = tokens;
 
-            if let Some(db) = &self.db {
+            if let Some(db) = &inner.db {
                 let data = serde_json::to_string(&pattern).unwrap_or_default();
-                let _ = db.execute(
+                if let Err(e) = db.execute(
                     "INSERT OR REPLACE INTO patterns (pattern_id, data) VALUES (?1, ?2)",
                     rusqlite::params![pattern_id, &data],
-                );
+                ) {
+                    tracing::warn!(pattern_id, error = %e, "failed to persist pattern success");
+                }
             }
         }
     }
 
     /// Record a failed execution against a pattern.
-    pub fn record_failure(&mut self, pattern_id: &str) {
-        if let Some(pattern) = self.patterns.get_mut(pattern_id) {
+    pub fn record_failure(&self, pattern_id: &str) {
+        let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(pattern) = inner.patterns.get_mut(pattern_id) {
             pattern.usage_count += 1;
             let n = pattern.usage_count as f64;
             pattern.success_rate = (pattern.success_rate * (n - 1.0)) / n;
             pattern.updated_at = chrono::Utc::now();
 
-            if let Some(db) = &self.db {
+            if let Some(db) = &inner.db {
                 let data = serde_json::to_string(&pattern).unwrap_or_default();
-                let _ = db.execute(
+                if let Err(e) = db.execute(
                     "INSERT OR REPLACE INTO patterns (pattern_id, data) VALUES (?1, ?2)",
                     rusqlite::params![pattern_id, &data],
-                );
+                ) {
+                    tracing::warn!(pattern_id, error = %e, "failed to persist pattern failure");
+                }
             }
         }
     }
 
     /// List all patterns, optionally filtered by tag.
-    pub fn list(&self, tag: Option<&str>) -> Vec<&ExecutionPattern> {
-        let mut all: Vec<&ExecutionPattern> = self.patterns.values().collect();
+    pub fn list(&self, tag: Option<&str>) -> Vec<ExecutionPattern> {
+        let inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let mut all: Vec<ExecutionPattern> = inner.patterns.values().cloned().collect();
+        drop(inner);
         if let Some(t) = tag {
             all.retain(|p| p.tags.iter().any(|tag| tag.eq_ignore_ascii_case(t)));
         }
         all.sort_by(|a, b| b.success_rate.total_cmp(&a.success_rate));
         all
     }
+}
 
+impl Default for PatternStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl PatternStoreInner {
     fn seed_builtin_patterns(&mut self) {
         let now = chrono::Utc::now();
 
         // Pattern #1044: CSV Cleaning
-        self.store(ExecutionPattern {
+        self.store_pattern(ExecutionPattern {
             pattern_id: "#1044".to_string(),
             description: "Clean and sort a CSV dataset".to_string(),
             task_signature: TaskSignature {
@@ -204,7 +234,7 @@ df.to_csv("{{output_path}}", index=False)
         });
 
         // Pattern #1045: JSON Transformation
-        self.store(ExecutionPattern {
+        self.store_pattern(ExecutionPattern {
             pattern_id: "#1045".to_string(),
             description: "Transform and flatten nested JSON".to_string(),
             task_signature: TaskSignature {
@@ -251,11 +281,9 @@ with open("{{output_path}}", "w") as f:
             updated_at: now,
         });
     }
-}
 
-impl Default for PatternStore {
-    fn default() -> Self {
-        Self::new()
+    fn store_pattern(&mut self, pattern: ExecutionPattern) {
+        self.patterns.insert(pattern.pattern_id.clone(), pattern);
     }
 }
 

@@ -49,6 +49,15 @@ pub fn create_backup(data_dir: &Path, output: &Path) -> Result<PathBuf, String> 
         let _ = std::fs::remove_file(&snapshot_path);
     }
 
+    let patterns_db_path = data_dir.join("vee_patterns.db");
+    let patterns_snapshot_path = data_dir.join(".vee_patterns.db.snapshot");
+    if patterns_db_path.exists() {
+        snapshot_db(&patterns_db_path, &patterns_snapshot_path)?;
+        tar.append_path_with_name(&patterns_snapshot_path, "vee_patterns.db")
+            .map_err(|e| format!("append patterns database snapshot: {e}"))?;
+        let _ = std::fs::remove_file(&patterns_snapshot_path);
+    }
+
     let dir_entries: [(&str, PathBuf); 3] = [
         ("artifacts", data_dir.join("artifacts")),
         ("keys", data_dir.join("keys")),

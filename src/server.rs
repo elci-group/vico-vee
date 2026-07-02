@@ -581,6 +581,7 @@ async fn submit_osmosis_task(
         source_code: payload.to_string(),
         capabilities,
         capability_grants,
+        project_id: None,
         budget: crate::types::ExecutionBudget {
             cpu_seconds: 10,
             memory_mb: 128,

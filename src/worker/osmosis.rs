@@ -3,7 +3,7 @@
 //! Delegates diff/merge/reject operations for VEE artifacts to the shared
 //! `OsmosisEngine`.
 
-use super::core::{verify_task_grants, RuntimeWorker};
+use super::core::{verify_task_grants, RuntimeWorker, WorkerOutput};
 use crate::artifact::ArtifactStore;
 use crate::capability::CapabilityVerifier;
 use crate::osmosis::OsmosisEngine;
@@ -66,7 +66,7 @@ impl RuntimeWorker for OsmosisWorker {
         Ok(())
     }
 
-    async fn execute(&self, task: &ExecutionTask) -> Result<Vec<Artifact>, ExecutionError> {
+    async fn execute(&self, task: &ExecutionTask) -> Result<WorkerOutput, ExecutionError> {
         if task.source_code.len() > 100_000 {
             return Err(ExecutionError {
                 code: "OSMOSIS_PAYLOAD_TOO_LARGE".into(),
@@ -122,7 +122,11 @@ impl RuntimeWorker for OsmosisWorker {
                         line_count: 0,
                     });
                 }
-                Ok(artifacts)
+                Ok(WorkerOutput {
+                    artifacts,
+                    stderr: String::new(),
+                    exit_code: Some(0),
+                })
             }
             OsmosisOperation::Merge(req) => {
                 if !Self::require_write(&self.caps) {
@@ -140,20 +144,24 @@ impl RuntimeWorker for OsmosisWorker {
                     .merge(project_root.as_deref(), &req)
                     .await
                     .map_err(osmosis_error)?;
-                Ok(vec![
-                    Artifact::Json {
-                        value: serde_json::to_value(&result).unwrap_or_default(),
-                        schema_hash: "osmosis-merge-v1".into(),
-                    },
-                    Artifact::Text {
-                        content: format!(
-                            "Merged {} ({} bytes)",
-                            result.target_path, result.bytes_written
-                        ),
-                        format: TextFormat::Plain,
-                        line_count: 1,
-                    },
-                ])
+                Ok(WorkerOutput {
+                    artifacts: vec![
+                        Artifact::Json {
+                            value: serde_json::to_value(&result).unwrap_or_default(),
+                            schema_hash: "osmosis-merge-v1".into(),
+                        },
+                        Artifact::Text {
+                            content: format!(
+                                "Merged {} ({} bytes)",
+                                result.target_path, result.bytes_written
+                            ),
+                            format: TextFormat::Plain,
+                            line_count: 1,
+                        },
+                    ],
+                    stderr: String::new(),
+                    exit_code: Some(0),
+                })
             }
             OsmosisOperation::Reject(req) => {
                 if !Self::require_write(&self.caps) {
@@ -171,20 +179,24 @@ impl RuntimeWorker for OsmosisWorker {
                     .reject(project_root.as_deref(), &req)
                     .await
                     .map_err(osmosis_error)?;
-                Ok(vec![
-                    Artifact::Json {
-                        value: serde_json::to_value(&result).unwrap_or_default(),
-                        schema_hash: "osmosis-reject-v1".into(),
-                    },
-                    Artifact::Text {
-                        content: format!(
-                            "Rejected {} (restored: {})",
-                            result.target_path, result.restored
-                        ),
-                        format: TextFormat::Plain,
-                        line_count: 1,
-                    },
-                ])
+                Ok(WorkerOutput {
+                    artifacts: vec![
+                        Artifact::Json {
+                            value: serde_json::to_value(&result).unwrap_or_default(),
+                            schema_hash: "osmosis-reject-v1".into(),
+                        },
+                        Artifact::Text {
+                            content: format!(
+                                "Rejected {} (restored: {})",
+                                result.target_path, result.restored
+                            ),
+                            format: TextFormat::Plain,
+                            line_count: 1,
+                        },
+                    ],
+                    stderr: String::new(),
+                    exit_code: Some(0),
+                })
             }
         }
     }

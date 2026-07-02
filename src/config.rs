@@ -72,6 +72,10 @@ pub struct Config {
     /// cancellation during graceful shutdown.
     #[serde(default = "default_shutdown_grace_period_secs")]
     pub shutdown_grace_period_secs: u64,
+
+    /// Optional path to the pattern store database.
+    /// Defaults to `data_dir.join("vee_patterns.db")`.
+    pub pattern_store_path: Option<PathBuf>,
 }
 
 /// Rate-limit configuration.
@@ -218,6 +222,7 @@ impl Default for Config {
             request_timeout_secs: default_request_timeout_secs(),
             rate_limit: RateLimitConfig::default(),
             shutdown_grace_period_secs: default_shutdown_grace_period_secs(),
+            pattern_store_path: None,
         }
     }
 }
@@ -298,6 +303,10 @@ pub struct Cli {
     /// Seconds to wait for in-flight executions during graceful shutdown.
     #[arg(long, env = "VICO_VEE_SHUTDOWN_GRACE_PERIOD_SECS")]
     pub shutdown_grace_period_secs: Option<u64>,
+
+    /// Path to the pattern store database.
+    #[arg(long, env = "VICO_VEE_PATTERN_STORE_PATH")]
+    pub pattern_store_path: Option<PathBuf>,
 
     /// Create a backup tarball and exit.
     #[arg(long, group = "lifecycle")]
@@ -439,6 +448,9 @@ impl Config {
                 .parse()
                 .map_err(|e| format!("VICO_VEE_SHUTDOWN_GRACE_PERIOD_SECS: {e}"))?;
         }
+        if let Ok(v) = std::env::var("VICO_VEE_PATTERN_STORE_PATH") {
+            self.pattern_store_path = Some(PathBuf::from(v));
+        }
         Ok(())
     }
 
@@ -497,6 +509,9 @@ impl Config {
         }
         if let Some(v) = cli.shutdown_grace_period_secs {
             self.shutdown_grace_period_secs = v;
+        }
+        if let Some(v) = cli.pattern_store_path {
+            self.pattern_store_path = Some(v);
         }
     }
 }

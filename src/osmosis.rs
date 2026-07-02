@@ -589,7 +589,8 @@ mod tests {
         let verifier = Arc::new(registry.verifier());
 
         let mut worker =
-            crate::worker::create_worker(crate::types::ExecutionLanguage::Osmosis, store);
+            crate::worker::create_worker(crate::types::ExecutionLanguage::Osmosis, store)
+                .expect("osmosis worker should be creatable");
         worker
             .init(
                 execution_id,
@@ -600,9 +601,9 @@ mod tests {
             )
             .await
             .unwrap();
-        let artifacts = worker.execute(&task).await.unwrap();
+        let output = worker.execute(&task).await.unwrap();
 
-        let has_diff_json = artifacts.iter().any(|a| matches!(a, Artifact::Json { value, schema_hash } if schema_hash == "osmosis-diff-v1" && value.get("structured").is_some()));
+        let has_diff_json = output.artifacts.iter().any(|a| matches!(a, Artifact::Json { value, schema_hash } if schema_hash == "osmosis-diff-v1" && value.get("structured").is_some()));
         assert!(has_diff_json);
     }
 }

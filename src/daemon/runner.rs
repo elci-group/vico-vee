@@ -172,9 +172,7 @@ pub(crate) async fn run_execution(
                         latency_ms,
                         0,
                     );
-                    if let Ok(mut store) = pattern_store.lock() {
-                        store.store(pattern);
-                    }
+                    pattern_store.store(pattern);
                 }
             }
 

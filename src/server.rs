@@ -114,8 +114,14 @@ impl AppState {
         let executions_db = config.data_dir.join("vee_executions.db");
         let execution_store =
             crate::execution_store::ExecutionStore::new(&executions_db).ok();
+        let patterns_db = config
+            .pattern_store_path
+            .clone()
+            .unwrap_or_else(|| config.data_dir.join("vee_patterns.db"));
+        let pattern_store =
+            crate::pattern::PatternStore::new_with_path(&patterns_db).ok();
         let vee = Arc::new(
-            ExecutorDaemon::try_new_with_verifier(verifier, execution_store)
+            ExecutorDaemon::try_new_with_stores(verifier, execution_store, pattern_store)
                 .map_err(|e| format!("executor daemon: {}", e))?,
         );
         vee.restore_executions().await.map_err(|e| format!("restore executions: {e}"))?;
@@ -236,7 +242,12 @@ pub async fn vee_submit(
         "bound" | "context_bundle" => ExecutionLanguage::ContextBundle,
         "shell" => ExecutionLanguage::Shell,
         "wasm" => ExecutionLanguage::Wasm,
-        _ => ExecutionLanguage::Python,
+        other => {
+            return JsonResponse(serde_json::json!({
+                "success": false,
+                "error": format!("unsupported language: {}", other),
+            }));
+        }
     };
 
     let capabilities =

@@ -113,7 +113,7 @@ fn test_pattern_find_matches() {
 
 #[test]
 fn test_pattern_record_success() {
-    let mut store = PatternStore::new();
+    let store = PatternStore::new();
     store.record_success("#1044", 1000, 500);
     let p = store.get("#1044").unwrap();
     assert_eq!(p.usage_count, 1);

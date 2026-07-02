@@ -3,7 +3,7 @@
 //! Both workers delegate to external CLI tooling (`goten`, `egor`, `bound`)
 //! and share helpers for resolving tool binaries.
 
-use super::core::{executable_present, tool_binary, verify_task_grants, RuntimeWorker};
+use super::core::{executable_present, tool_binary, verify_task_grants, RuntimeWorker, WorkerOutput};
 use crate::capability::CapabilityVerifier;
 use crate::types::*;
 use async_trait::async_trait;
@@ -105,7 +105,7 @@ impl RuntimeWorker for GoWorker {
         Ok(())
     }
 
-    async fn execute(&self, task: &ExecutionTask) -> Result<Vec<Artifact>, ExecutionError> {
+    async fn execute(&self, task: &ExecutionTask) -> Result<WorkerOutput, ExecutionError> {
         if task.source_code.len() > 8_000 {
             return Err(ExecutionError {
                 code: "COMMAND_TOO_LARGE".into(),
@@ -215,7 +215,11 @@ impl RuntimeWorker for GoWorker {
             schema_hash: "vee-tool-contract-go-v1".into(),
         });
 
-        Ok(artifacts)
+        Ok(WorkerOutput {
+            artifacts,
+            stderr,
+            exit_code: Some(code),
+        })
     }
 
     async fn shutdown(self: Box<Self>) -> Result<(), String> {
@@ -308,7 +312,7 @@ impl RuntimeWorker for ContextBundleWorker {
         Ok(())
     }
 
-    async fn execute(&self, task: &ExecutionTask) -> Result<Vec<Artifact>, ExecutionError> {
+    async fn execute(&self, task: &ExecutionTask) -> Result<WorkerOutput, ExecutionError> {
         if task.source_code.len() > 8_000 {
             return Err(ExecutionError {
                 code: "COMMAND_TOO_LARGE".into(),
@@ -444,7 +448,11 @@ impl RuntimeWorker for ContextBundleWorker {
             });
         }
 
-        Ok(artifacts)
+        Ok(WorkerOutput {
+            artifacts,
+            stderr,
+            exit_code: Some(code),
+        })
     }
 
     async fn shutdown(self: Box<Self>) -> Result<(), String> {

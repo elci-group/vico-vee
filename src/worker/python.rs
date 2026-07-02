@@ -3,7 +3,7 @@
 //! Executes Python source code inside a sandboxed subprocess with Landlock
 //! and seccomp-bpf protections.
 
-use super::core::{verify_task_grants, RuntimeWorker};
+use super::core::{verify_task_grants, RuntimeWorker, WorkerOutput};
 use crate::capability::CapabilityVerifier;
 use crate::sandbox::{build_python_command, extract_artifacts, run_sandboxed};
 use crate::types::*;
@@ -47,7 +47,7 @@ impl RuntimeWorker for PythonWorker {
         Ok(())
     }
 
-    async fn execute(&self, task: &ExecutionTask) -> Result<Vec<Artifact>, ExecutionError> {
+    async fn execute(&self, task: &ExecutionTask) -> Result<WorkerOutput, ExecutionError> {
         // Validate code size
         if task.source_code.len() > 50_000 {
             return Err(ExecutionError {
@@ -170,7 +170,11 @@ impl RuntimeWorker for PythonWorker {
             schema_hash: "sandbox-meta".into(),
         });
 
-        Ok(artifacts)
+        Ok(WorkerOutput {
+            artifacts,
+            stderr: sandbox_result.stderr,
+            exit_code: sandbox_result.exit_code,
+        })
     }
 
     async fn shutdown(self: Box<Self>) -> Result<(), String> {

@@ -131,8 +131,8 @@ impl PatternStore {
             pattern.avg_cost.cpu_seconds = latency_ms / 1000;
             pattern.avg_cost.token_budget = tokens;
 
+            let data = serde_json::to_string(&*pattern).unwrap_or_default();
             if let Some(db) = &inner.db {
-                let data = serde_json::to_string(&pattern).unwrap_or_default();
                 if let Err(e) = db.execute(
                     "INSERT OR REPLACE INTO patterns (pattern_id, data) VALUES (?1, ?2)",
                     rusqlite::params![pattern_id, &data],
@@ -152,8 +152,8 @@ impl PatternStore {
             pattern.success_rate = (pattern.success_rate * (n - 1.0)) / n;
             pattern.updated_at = chrono::Utc::now();
 
+            let data = serde_json::to_string(&*pattern).unwrap_or_default();
             if let Some(db) = &inner.db {
-                let data = serde_json::to_string(&pattern).unwrap_or_default();
                 if let Err(e) = db.execute(
                     "INSERT OR REPLACE INTO patterns (pattern_id, data) VALUES (?1, ?2)",
                     rusqlite::params![pattern_id, &data],

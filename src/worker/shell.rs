@@ -3,7 +3,7 @@
 //! Executes shell scripts inside a sandboxed subprocess with tightened
 //! environment and capability restrictions.
 
-use super::core::{verify_task_grants, RuntimeWorker};
+use super::core::{verify_task_grants, RuntimeWorker, WorkerOutput};
 use crate::capability::CapabilityVerifier;
 use crate::sandbox::{extract_artifacts, run_sandboxed, SandboxConfig};
 use crate::types::*;
@@ -52,7 +52,7 @@ impl RuntimeWorker for ShellWorker {
         Ok(())
     }
 
-    async fn execute(&self, task: &ExecutionTask) -> Result<Vec<Artifact>, ExecutionError> {
+    async fn execute(&self, task: &ExecutionTask) -> Result<WorkerOutput, ExecutionError> {
         if task.source_code.len() > 50_000 {
             return Err(ExecutionError {
                 code: "CODE_TOO_LARGE".into(),
@@ -173,7 +173,11 @@ impl RuntimeWorker for ShellWorker {
             schema_hash: "sandbox-meta".into(),
         });
 
-        Ok(artifacts)
+        Ok(WorkerOutput {
+            artifacts,
+            stderr: result.stderr,
+            exit_code: result.exit_code,
+        })
     }
 
     async fn shutdown(self: Box<Self>) -> Result<(), String> {

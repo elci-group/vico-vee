@@ -25,21 +25,21 @@ Goal: close critical production blockers and make the service safe to expose.
 - [x] Add integration tests for body limits, execution persistence across
       restarts, and request metrics.
 
-## Phase 2 — Completeness & Operability
+## Phase 2 — Completeness & Operability (completed)
 
 Goal: fill functional gaps and improve operational experience.
 
-- [ ] Implement or remove Rust / JavaScript / Wasm worker stubs.
-- [ ] Implement ODIN integration or remove the stub endpoints from the public API.
-- [ ] Invoke hypothesis validation in `daemon/runner.rs` and surface results.
-- [ ] Persist patterns via `PatternStore::new_with_path` instead of in-memory.
-- [ ] Add request-timeout middleware using `config.request_timeout_secs`.
-- [ ] Add per-project rate limits and quotas.
-- [ ] Add `X-Forwarded-For` / trusted-proxy IP extraction for rate limiting.
-- [ ] Complete OpenAPI request/response schemas and regenerate docs.
-- [ ] Harden Dockerfile (`HEALTHCHECK`, example configs) and add
+- [x] Implement Rust / JavaScript / Wasm workers as external-command runners.
+- [x] Implement ODIN integration backed by a configurable Ollama endpoint.
+- [x] Invoke hypothesis validation in `daemon/runner.rs` and surface results.
+- [x] Persist patterns via `PatternStore::new_with_path` instead of in-memory.
+- [x] Add request-timeout middleware using `config.request_timeout_secs`.
+- [x] Add per-project rate limits and quotas.
+- [x] Add `X-Forwarded-For` / trusted-proxy IP extraction for rate limiting.
+- [x] Complete OpenAPI request/response schemas and regenerate docs.
+- [x] Harden Dockerfile (`HEALTHCHECK`, example configs) and add
       `docker-compose.yml`.
-- [ ] Add CI/CD workflow with `cargo audit`, `clippy::pedantic`, and release
+- [x] Add CI/CD workflow with `cargo audit`, `clippy::pedantic`, and release
       builds.
 
 ## Phase 3 — SOTA Hardening & DX

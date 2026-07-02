@@ -12,6 +12,7 @@ Extracted from `vico-desktop` so that ViCo can talk to VEE over a well-defined H
 - Persists artifacts in a content-addressable SQLite-backed store.
 - Exposes a REST API for submit, status, cancel, list, artifacts, dashboard, patterns, backups, and Osmosis diff/merge/reject.
 - Supports multi-tenant project isolation, rate limiting, API-key auth, TLS, and Prometheus metrics.
+- Validates execution output against optional hypotheses and persists successful execution patterns.
 
 ## Running
 
@@ -21,6 +22,26 @@ cargo run
 ```
 
 The service listens on port `9987` by default. Override with `VICO_VEE_PORT`.
+
+### Docker
+
+Build and run with Docker:
+
+```bash
+docker build -t vico-vee .
+docker run -d \
+  -p 9987:9987 \
+  -v vico-vee-data:/data \
+  -v ./config:/config:ro \
+  -e VICO_VEE_REQUIRE_AUTH=false \
+  vico-vee
+```
+
+Or use Docker Compose, which also starts an Ollama sidecar for ODIN:
+
+```bash
+docker compose up -d
+```
 
 ### Authentication
 

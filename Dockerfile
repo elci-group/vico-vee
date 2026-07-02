@@ -32,6 +32,7 @@ FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libdbus-1-3 \
     ca-certificates \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user for the service.
@@ -51,7 +52,10 @@ ENV VICO_VEE_CONFIG_DIR=/config
 ENV VICO_VEE_BIND=0.0.0.0
 ENV VICO_VEE_PORT=9987
 
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD curl -fsS http://localhost:9987/health || exit 1
+
 USER vico-vee
 
 ENTRYPOINT ["/usr/local/bin/vico-vee"]
-CMD ["--bind", "0.0.0.0"]
+CMD []

@@ -1,0 +1,83 @@
+name: vico-vee CI
+
+on:
+  push:
+    paths:
+      - "src-tauri/vico-vee/**"
+  pull_request:
+    paths:
+      - "src-tauri/vico-vee/**"
+
+defaults:
+  run:
+    working-directory: src-tauri/vico-vee
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.96
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "src-tauri/vico-vee"
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Run clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Run clippy pedantic
+        run: cargo clippy --all-targets --all-features -- -W clippy::pedantic
+        continue-on-error: true
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Run cargo audit
+        run: cargo audit
+
+      - name: Run tests
+        run: cargo test --all-features
+
+      - name: Check benchmarks compile
+        run: cargo check --benches
+
+  docker-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        working-directory: src-tauri/vico-vee
+        run: docker build -t vico-vee:smoke .
+
+      - name: Smoke test container
+        working-directory: src-tauri/vico-vee
+        run: |
+          mkdir -p /tmp/vico-vee-config
+          docker run -d --name vico-vee-smoke \
+            -p 9987:9987 \
+            -v /tmp/vico-vee-config:/config \
+            -e VICO_VEE_REQUIRE_AUTH=false \
+            vico-vee:smoke
+          for i in {1..30}; do
+            curl -fsS http://localhost:9987/health && exit 0
+            sleep 1
+          done
+          docker logs vico-vee-smoke
+          exit 1
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker stop vico-vee-smoke || true
+          docker rm vico-vee-smoke || true

@@ -4,12 +4,15 @@
 //! reloader so long-lived deployments can rotate certificates without
 //! restarting the process.
 
+use axum::extract::ConnectInfo;
 use rustls::pki_types::CertificateDer;
 use rustls::ServerConfig;
 use std::future::Future;
+use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use tokio_rustls::TlsAcceptor;
+use tower::ServiceExt;
 
 /// Paths to a TLS certificate chain and private key.
 #[derive(Debug, Clone)]
@@ -158,14 +161,23 @@ pub async fn serve_https(
                 break;
             }
             accept = listener.accept() => {
-                let (stream, _) = accept?;
+                let (stream, peer_addr) = accept?;
                 let app = app.clone();
                 let tls_acceptor = tls_reloader.acceptor();
                 tokio::spawn(async move {
                     match tls_acceptor.accept(stream).await {
                         Ok(stream) => {
+                            let peer_addr = stream
+                                .get_ref()
+                                .0
+                                .peer_addr()
+                                .unwrap_or(peer_addr);
                             let io = hyper_util::rt::TokioIo::new(stream);
-                            let svc = hyper_util::service::TowerToHyperService::new(app);
+                            let svc = app.clone().map_request(move |mut req: axum::extract::Request| {
+                                req.extensions_mut().insert(ConnectInfo(peer_addr));
+                                req
+                            });
+                            let svc = hyper_util::service::TowerToHyperService::new(svc);
                             let builder = hyper_util::server::conn::auto::Builder::new(
                                 hyper_util::rt::TokioExecutor::new(),
                             );

@@ -73,6 +73,9 @@ fn bench_submit_1000_noop_shell(c: &mut Criterion) {
             burst: 10_000,
             exec_per_sec: 10_000,
             exec_burst: 10_000,
+            project_per_sec: 10_000,
+            project_burst: 10_000,
+            trusted_proxy_cidrs: vec![],
         },
         shutdown_grace_period_secs: 30,
         ..Config::default()

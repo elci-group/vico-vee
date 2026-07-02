@@ -80,11 +80,7 @@ impl ExecutorDaemon {
         execution_store: Option<ExecutionStore>,
     ) -> Result<Self, String> {
         let store = execution_store.map(|s| Arc::new(std::sync::Mutex::new(s)));
-        let mut daemon = Self::with_verifier(verifier, store);
-        if let Err(e) = daemon.load_executions() {
-            return Err(format!("load persisted executions: {e}"));
-        }
-        Ok(daemon)
+        Ok(Self::with_verifier(verifier, store))
     }
 
     /// Synchronous constructor for callers that do not need async setup.
@@ -111,14 +107,14 @@ impl ExecutorDaemon {
         }
     }
 
-    /// Load persisted executions into the in-memory store.
-    fn load_executions(&mut self) -> Result<(), String> {
+    /// Load persisted executions from disk into the in-memory store.
+    pub async fn restore_executions(&self) -> Result<(), String> {
         if let Some(store) = &self.inner.execution_store {
             let results = {
                 let guard = store.lock().unwrap_or_else(|e| e.into_inner());
                 guard.load_all()?
             };
-            let mut map = self.inner.store.blocking_write();
+            let mut map = self.inner.store.write().await;
             for result in results {
                 let project_id = result
                     .project_id

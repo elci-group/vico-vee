@@ -116,6 +116,7 @@ mod tests {
 
         let result = ExecutionResult {
             execution_id: "exec-1".into(),
+            project_id: Some("default".into()),
             status: ExecutionStatus::Completed,
             phase: crate::types::ExecutionPhase::Execution,
             artifacts: vec![],
@@ -146,6 +147,7 @@ mod tests {
         for i in 0..3 {
             let result = ExecutionResult {
                 execution_id: format!("exec-{i}"),
+                project_id: None,
                 status: ExecutionStatus::Completed,
                 phase: crate::types::ExecutionPhase::Execution,
                 artifacts: vec![],

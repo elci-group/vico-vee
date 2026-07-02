@@ -111,10 +111,14 @@ impl AppState {
         ));
 
         let verifier = capability_issuer.lock().await.verifier();
+        let executions_db = config.data_dir.join("vee_executions.db");
+        let execution_store =
+            crate::execution_store::ExecutionStore::new(&executions_db).ok();
         let vee = Arc::new(
-            ExecutorDaemon::try_new_with_verifier(verifier)
+            ExecutorDaemon::try_new_with_verifier(verifier, execution_store)
                 .map_err(|e| format!("executor daemon: {}", e))?,
         );
+        vee.restore_executions().await.map_err(|e| format!("restore executions: {e}"))?;
         vee.start().await;
 
         let auth_keys = crate::auth::AuthKeys::load(&config.api_keys)

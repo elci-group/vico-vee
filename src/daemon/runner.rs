@@ -68,7 +68,13 @@ pub(crate) async fn run_execution(
         )
         .await
     {
-        mark_failed(&inner, &store_key, format!("worker init failed: {}", e)).await;
+        mark_failed(
+            &inner,
+            &store_key,
+            &project_id_for_persist,
+            format!("worker init failed: {}", e),
+        )
+        .await;
         inner.inflight.lock().await.remove(&execution_id);
         return;
     }

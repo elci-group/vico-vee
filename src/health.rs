@@ -44,7 +44,7 @@ struct Inner {
     histograms: HashMap<String, HashMap<Labels, Histogram>>,
 }
 
-#[derive(Default, Clone)]
+#[derive(Clone)]
 struct Histogram {
     buckets: Vec<f64>,
     counts: Vec<u64>,
@@ -52,8 +52,8 @@ struct Histogram {
     count: u64,
 }
 
-impl Histogram {
-    fn new() -> Self {
+impl Default for Histogram {
+    fn default() -> Self {
         // Standard Prometheus latency buckets (seconds).
         let buckets = vec![
             0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
@@ -65,7 +65,9 @@ impl Histogram {
             count: 0,
         }
     }
+}
 
+impl Histogram {
     fn observe(&mut self, value: f64) {
         self.sum += value;
         self.count += 1;
@@ -125,7 +127,7 @@ impl MetricsRegistry {
             .entry(name.to_string())
             .or_default()
             .entry(labels)
-            .or_insert_with(Histogram::new)
+            .or_default()
             .observe(value);
     }
 

@@ -163,6 +163,18 @@ fn default_rate_limit_burst() -> u32 {
     50
 }
 
+fn default_exec_rate_limit_per_sec() -> u32 {
+    10
+}
+
+fn default_exec_rate_limit_burst() -> u32 {
+    30
+}
+
+fn default_shutdown_grace_period_secs() -> u64 {
+    30
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -180,6 +192,9 @@ impl Default for Config {
             request_timeout_secs: default_request_timeout_secs(),
             rate_limit_per_sec: default_rate_limit_per_sec(),
             rate_limit_burst: default_rate_limit_burst(),
+            rate_limit_exec_per_sec: default_exec_rate_limit_per_sec(),
+            rate_limit_exec_burst: default_exec_rate_limit_burst(),
+            shutdown_grace_period_secs: default_shutdown_grace_period_secs(),
         }
     }
 }
@@ -239,6 +254,18 @@ pub struct Cli {
     /// Rate limit: maximum burst per IP.
     #[arg(long, env = "VICO_VEE_RATE_LIMIT_BURST")]
     pub rate_limit_burst: Option<u32>,
+
+    /// Execution rate limit: submissions per second per agent_id.
+    #[arg(long, env = "VICO_VEE_EXEC_RATE_LIMIT_PER_SEC")]
+    pub exec_rate_limit_per_sec: Option<u32>,
+
+    /// Execution rate limit: maximum burst per agent_id.
+    #[arg(long, env = "VICO_VEE_EXEC_RATE_LIMIT_BURST")]
+    pub exec_rate_limit_burst: Option<u32>,
+
+    /// Seconds to wait for in-flight executions during graceful shutdown.
+    #[arg(long, env = "VICO_VEE_SHUTDOWN_GRACE_PERIOD_SECS")]
+    pub shutdown_grace_period_secs: Option<u64>,
 }
 
 impl Config {

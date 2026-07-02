@@ -254,6 +254,10 @@ impl ExecutorDaemon {
             Some(result) => {
                 result.status = ExecutionStatus::Cancelled;
                 result.completed_at = Some(Utc::now());
+                drop(store);
+                self.inner
+                    .persist_result(project_id, execution_id)
+                    .await;
                 Ok(())
             }
             None => Err(format!("execution '{}' not found", execution_id)),

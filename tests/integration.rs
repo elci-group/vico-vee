@@ -503,6 +503,54 @@ async fn backup_restore_round_trip_via_http() {
 }
 
 #[tokio::test]
+async fn execution_metadata_persists_across_daemon_restarts() {
+    let tmp = tempfile::tempdir().unwrap();
+    let config = test_config(&tmp);
+    let client = Client::new();
+
+    // First server instance: submit a shell task and wait for it to complete.
+    let server = spawn_server(config.clone()).await;
+    let resp = submit_code(
+        &client,
+        &server.addr,
+        ADMIN_TOKEN,
+        "shell",
+        "echo 'persistent execution'",
+        "persist-agent",
+        None,
+    )
+    .await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    let submit: Value = resp.json().await.unwrap();
+    let exec_id = submit["execution_id"].as_str().unwrap().to_string();
+
+    let terminal = wait_terminal(&client, &server.addr, ADMIN_TOKEN, &exec_id, None)
+        .await
+        .expect("task should reach terminal state");
+    assert_eq!(terminal["data"]["status"], "Completed");
+    server.stop().await;
+
+    // Second server instance with the same data directory: the execution should
+    // still be present and terminal.
+    let server2 = spawn_server(config).await;
+    let status = fetch_status(&client, &server2.addr, ADMIN_TOKEN, &exec_id, None)
+        .await
+        .expect("status should be present after restart");
+    assert_eq!(status["data"]["status"], "Completed");
+    let stdout = status["data"]["artifacts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|v| v["type"] == "Text")
+        .and_then(|v| v["data"]["content"].as_str());
+    assert!(stdout
+        .expect("stdout artifact missing")
+        .contains("persistent execution"));
+
+    server2.stop().await;
+}
+
+#[tokio::test]
 async fn multi_tenancy_project_isolation() {
     let tmp = tempfile::tempdir().unwrap();
     let server = spawn_server(test_config(&tmp)).await;

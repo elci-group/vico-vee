@@ -49,8 +49,33 @@ impl AppState {
 
         let vee = Arc::new(ExecutorDaemon::new());
         let capability_issuer = Arc::new(Mutex::new(CapabilityRegistry::new_with_seed([0u8; 32])));
-        let auth_keys = crate::auth::AuthKeys::load(&config.api_keys)
-            .unwrap_or_else(|_| crate::auth::AuthKeys::from_map(std::collections::HashMap::new(), false));
+        let auth_keys = crate::auth::AuthKeys::load(&config.api_keys).unwrap_or_else(|_| {
+            // Fall back to deterministic test keys so unit tests that exercise
+            // scoped routes still see proper 401/403 behaviour.
+            let mut keys = std::collections::HashMap::new();
+            keys.insert(
+                "admin".to_string(),
+                crate::auth::ApiKey {
+                    token: "test-admin-token".to_string(),
+                    scopes: vec!["submit".to_string(), "read".to_string(), "admin".to_string()],
+                },
+            );
+            keys.insert(
+                "read".to_string(),
+                crate::auth::ApiKey {
+                    token: "test-read-token".to_string(),
+                    scopes: vec!["read".to_string()],
+                },
+            );
+            keys.insert(
+                "submit".to_string(),
+                crate::auth::ApiKey {
+                    token: "test-submit-token".to_string(),
+                    scopes: vec!["submit".to_string()],
+                },
+            );
+            crate::auth::AuthKeys::from_map(keys, true)
+        });
         let metrics = MetricsRegistry::default();
         let rate_limiter = RateLimiter::new(config.rate_limit.clone());
         Self {

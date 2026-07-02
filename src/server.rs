@@ -323,10 +323,9 @@ pub fn default_vee_limit() -> usize {
 
 pub async fn vee_list(
     State(state): State<AppState>,
-    project: Option<crate::tenant::ProjectContext>,
+    project: crate::tenant::ProjectContext,
     Json(input): Json<VeeListInput>,
 ) -> JsonResponse<serde_json::Value> {
-    let project_id = project.as_ref().map(|p| p.project_id.as_str());
     let status_filter = input.status.and_then(|s| match s.as_str() {
         "pending" => Some(crate::types::ExecutionStatus::Pending),
         "queued" => Some(crate::types::ExecutionStatus::Queued),
@@ -337,7 +336,7 @@ pub async fn vee_list(
         _ => None,
     });
 
-    let mut results = state.vee.list(status_filter, project_id).await;
+    let mut results = state.vee.list(status_filter, Some(&project.project_id)).await;
     results.truncate(input.limit);
 
     JsonResponse(serde_json::json!({ "success": true, "data": results }))
